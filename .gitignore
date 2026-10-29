@@ -1,0 +1,6 @@
+node_modules/
+package-lock.json
+.DS_Store
+
+# build output; the committed copy at the repo root is the one you load on a phone
+totp-offline/dist/

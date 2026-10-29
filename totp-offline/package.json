@@ -1,0 +1,16 @@
+{
+  "name": "totp-offline",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Single-file offline TOTP/HOTP authenticator, with an importer for Authenticator Plus (SQLCipher) backups",
+  "license": "MIT",
+  "scripts": {
+    "build": "node build.js",
+    "test": "node test/test_crypto.js && node test/test_sqlite.js && node test/test_e2e.js",
+    "test:unit": "node test/test_crypto.js && node test/test_sqlite.js",
+    "test:e2e": "node test/test_e2e.js"
+  },
+  "devDependencies": {
+    "playwright": "^1.48.0"
+  }
+}

@@ -1,0 +1,1926 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Authenticator">
+<meta name="color-scheme" content="dark light">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; font-src data:; connect-src 'none'; form-action 'none'; base-uri 'none'">
+<!-- frame-ancestors / X-Frame-Options are deliberately absent: browsers ignore
+     frame-ancestors when it arrives via <meta>, and a file:// page cannot send
+     response headers. Do not add it here — it only produces a console error. -->
+<meta name="referrer" content="no-referrer">
+<title>Offline Authenticator</title>
+<style>
+:root {
+  --bg: #0f1115;
+  --panel: #171a21;
+  --panel-2: #1e222b;
+  --line: #2a2f3a;
+  --text: #e8eaf0;
+  --muted: #98a0b3;
+  --accent: #4f8cff;
+  --accent-2: #2f6ae0;
+  --danger: #ff5c5c;
+  --ok: #35d07f;
+  --warn: #ffb340;
+  --radius: 14px;
+}
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body {
+  margin: 0; padding: 0; background: var(--bg); color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", "PingFang SC", "Microsoft YaHei", sans-serif;
+  font-size: 16px; line-height: 1.5;
+}
+body { padding: 0 0 60px; overscroll-behavior-y: none; }
+.wrap { max-width: 720px; margin: 0 auto; padding: 0 16px; }
+
+header.app {
+  position: sticky; top: 0; z-index: 20; background: rgba(15,17,21,.92);
+  backdrop-filter: saturate(180%) blur(14px); -webkit-backdrop-filter: saturate(180%) blur(14px);
+  border-bottom: 1px solid var(--line);
+}
+header.app .inner { max-width: 720px; margin: 0 auto; padding: 12px 16px; display: flex; align-items: center; gap: 10px; }
+header.app h1 { font-size: 17px; margin: 0; font-weight: 650; letter-spacing: .2px; flex: 1; }
+header.app .sub { font-size: 11px; color: var(--muted); font-weight: 400; display: block; letter-spacing: 0; }
+h2 { font-size: 15px; margin: 22px 0 10px; font-weight: 650; }
+h3 { font-size: 14px; margin: 0 0 8px; font-weight: 600; color: var(--muted); }
+
+.card {
+  background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 16px; margin-bottom: 14px;
+}
+.card.tight { padding: 12px 14px; }
+.muted { color: var(--muted); font-size: 13px; }
+.tiny { font-size: 12px; }
+.center { text-align: center; }
+.hr { height: 1px; background: var(--line); margin: 14px 0; }
+
+label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 5px; font-weight: 500; }
+input[type=text], input[type=password], input[type=number], select, textarea {
+  width: 100%; padding: 11px 12px; background: var(--panel-2); color: var(--text);
+  border: 1px solid var(--line); border-radius: 10px; font-size: 16px; font-family: inherit;
+  outline: none; appearance: none; -webkit-appearance: none;
+}
+textarea { min-height: 96px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 13px; resize: vertical; }
+input:focus, select:focus, textarea:focus { border-color: var(--accent); }
+input[readonly] { color: var(--muted); }
+select { background-image: none; }
+.field { margin-bottom: 12px; }
+.row { display: flex; gap: 10px; }
+.row > * { flex: 1; min-width: 0; }
+
+button {
+  font-family: inherit; font-size: 15px; font-weight: 550; padding: 11px 16px;
+  border-radius: 10px; border: 1px solid var(--line); background: var(--panel-2);
+  color: var(--text); cursor: pointer;
+}
+button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+button.primary:active { background: var(--accent-2); }
+button.danger { color: var(--danger); border-color: #46252a; }
+button.ghost { background: transparent; }
+button.small { font-size: 13px; padding: 7px 12px; }
+button:disabled { opacity: .45; cursor: default; }
+.btnrow { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+
+/* code list */
+.entry {
+  background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 13px 14px; margin-bottom: 10px;
+}
+.entry .top { display: flex; align-items: baseline; gap: 10px; }
+.entry .who { flex: 1; min-width: 0; }
+.entry .issuer { font-weight: 600; font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.entry .label { font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.entry .code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 27px; letter-spacing: 3px; font-weight: 600; font-variant-numeric: tabular-nums;
+  cursor: pointer; user-select: all; -webkit-user-select: all;
+}
+.entry .meta { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+.bar { flex: 1; height: 3px; background: var(--panel-2); border-radius: 3px; overflow: hidden; }
+.bar > i { display: block; height: 100%; background: var(--accent); width: 0; }
+.bar.low > i { background: var(--warn); }
+.bar.crit > i { background: var(--danger); }
+.secs { font-size: 11px; color: var(--muted); width: 22px; text-align: right; font-variant-numeric: tabular-nums; }
+.entry .secretbox {
+  margin-top: 8px; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px;
+  color: var(--muted); word-break: break-all; cursor: pointer; user-select: all; -webkit-user-select: all;
+  background: var(--panel-2); border-radius: 8px; padding: 8px 10px;
+}
+.entry .actions { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+
+.badge {
+  display: inline-block; font-size: 10px; padding: 2px 7px; border-radius: 20px;
+  background: var(--panel-2); color: var(--muted); border: 1px solid var(--line);
+  vertical-align: middle; letter-spacing: .3px;
+}
+.badge.hotp { color: var(--warn); border-color: #4a3a22; }
+
+.msg { border-radius: 10px; padding: 10px 12px; font-size: 13px; margin-bottom: 12px; }
+.msg.err { background: #2a1717; color: #ffb3b3; border: 1px solid #4a2525; }
+.msg.ok { background: #14261c; color: #9fe8bd; border: 1px solid #23452f; }
+.msg.warn { background: #2a2314; color: #ffd79a; border: 1px solid #4a3c1d; }
+.hidden { display: none !important; }
+
+details { margin-bottom: 12px; }
+details summary {
+  cursor: pointer; font-size: 14px; font-weight: 600; padding: 10px 0; color: var(--accent);
+  list-style: none;
+}
+details summary::-webkit-details-marker { display: none; }
+details summary::before { content: "▸ "; }
+details[open] summary::before { content: "▾ "; }
+
+.empty { text-align: center; padding: 34px 10px; color: var(--muted); }
+.empty .big { font-size: 34px; margin-bottom: 8px; }
+table.kv { width: 100%; border-collapse: collapse; font-size: 13px; }
+table.kv td { padding: 4px 0; vertical-align: top; }
+table.kv td:first-child { color: var(--muted); width: 40%; padding-right: 10px; }
+code.mono { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; }
+@media (prefers-color-scheme: light) {
+  :root { --bg:#f4f5f8; --panel:#fff; --panel-2:#f0f2f6; --line:#dde0e7; --text:#14161c; --muted:#666d7d; }
+  header.app { background: rgba(244,245,248,.92); }
+  .msg.err { background:#fdecec; color:#8a1f1f; border-color:#f3c4c4; }
+  .msg.ok { background:#e9f8ef; color:#14663a; border-color:#bfe5cd; }
+  .msg.warn { background:#fff6e5; color:#7a4c00; border-color:#f3dcae; }
+  button.danger { border-color:#f0c4c4; }
+}
+
+</style>
+</head>
+<body>
+
+<header class="app">
+  <div class="inner">
+    <h1>Offline Authenticator<span class="sub">2FA codes · no network · nothing leaves your device</span></h1>
+    <button id="lockBtn" class="small hidden">Lock</button>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <div id="loading" class="card center muted">Loading…</div>
+
+  <!-- ---------- SETUP ---------- -->
+  <div id="setup" class="hidden">
+    <div class="card">
+      <h3>Create your vault</h3>
+      <p class="muted tiny">Pick a password. It encrypts your codes on this device. There is no “forgot password”
+      — if you lose it, you lose the vault and will need each site's recovery codes.</p>
+      <div class="field"><label for="setupPw">Password (min 6 characters)</label>
+        <input id="setupPw" type="password" autocomplete="new-password" autocapitalize="off" spellcheck="false"></div>
+      <div class="field"><label for="setupPw2">Repeat password</label>
+        <input id="setupPw2" type="password" autocomplete="new-password" autocapitalize="off" spellcheck="false"></div>
+      <div id="setupErr" class="hidden"></div>
+      <button id="setupGo" class="primary">Create vault</button>
+    </div>
+    <div class="card tight muted tiny">
+      Already have a backup file? Create a vault first, then use <b>Restore backup</b> below.
+    </div>
+  </div>
+
+  <!-- ---------- LOCKED ---------- -->
+  <div id="locked" class="hidden">
+    <div class="card">
+      <h3>Unlock</h3>
+      <div class="field"><label for="unlockPw">Password</label>
+        <input id="unlockPw" type="password" autocomplete="current-password" autocapitalize="off" spellcheck="false"></div>
+      <div id="unlockErr" class="hidden"></div>
+      <button id="unlockGo" class="primary">Unlock</button>
+      <div class="btnrow">
+        <button id="wipeBtn" class="small danger">Delete stored vault</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ---------- UNLOCKED ---------- -->
+  <div id="unlocked" class="hidden">
+    <div id="msgArea" class="hidden"></div>
+    <div id="storeWarn" class="card tight tiny hidden">
+      This browser blocked local storage. Your vault will not survive closing the page — export a backup before you leave.
+    </div>
+
+    <div id="searchWrap" class="card tight">
+      <input id="filter" type="text" placeholder="Search accounts…" autocapitalize="off" spellcheck="false"
+             style="border:none;background:transparent;padding:0;">
+    </div>
+
+    <div style="display:flex;align-items:baseline;gap:10px;">
+      <h2 style="flex:1;">Your codes</h2>
+      <span id="count" class="muted tiny"></span>
+    </div>
+    <div id="list"></div>
+    <div id="empty" class="card empty">
+      <div class="big">🔐</div>
+      No accounts yet.<br>Import your Authenticator Plus backup below, or add one by hand.
+    </div>
+
+    <details open>
+      <summary>Import from Authenticator Plus (authplus.db)</summary>
+      <div class="card">
+        <p class="muted tiny">
+          In Authenticator Plus: <b>Settings → Backup &amp; Restore → Backup to SD Card</b>, then copy
+          <code class="mono">authplus.db</code> off the phone (on iPhone: Finder → your iPhone → Files →
+          Authenticator Plus → drag out the Backup folder).
+        </p>
+        <div class="field"><label for="dbFile">Database file</label>
+          <input id="dbFile" type="file" accept=".db,.sqlite,.sqlite3,*/*"></div>
+        <div class="field"><label for="dbPw">Authenticator Plus master password</label>
+          <input id="dbPw" type="password" autocomplete="off" autocapitalize="off" spellcheck="false"></div>
+        <div id="dbErr" class="hidden"></div>
+        <button id="dbGo" class="primary">Decrypt &amp; import</button>
+        <p class="muted tiny" style="margin-bottom:0;">The file is decrypted in this page only. Nothing is uploaded.</p>
+      </div>
+    </details>
+
+    <details>
+      <summary>Add an account manually</summary>
+      <div class="card">
+        <div class="row">
+          <div class="field"><label for="addIssuer">Issuer / service</label>
+            <input id="addIssuer" type="text" placeholder="Google" autocapitalize="off"></div>
+          <div class="field"><label for="addLabel">Account name</label>
+            <input id="addLabel" type="text" placeholder="you@gmail.com" autocapitalize="off" spellcheck="false"></div>
+        </div>
+        <div class="field"><label for="addSecret">Secret key (base32)</label>
+          <input id="addSecret" type="text" placeholder="JBSWY3DPEHPK3PXP" autocapitalize="characters" spellcheck="false"
+                 autocorrect="off"></div>
+        <div class="row">
+          <div class="field"><label for="addDigits">Digits</label>
+            <input id="addDigits" type="number" value="6" min="5" max="8" inputmode="numeric"></div>
+          <div class="field"><label for="addPeriod">Period (sec)</label>
+            <input id="addPeriod" type="number" value="30" min="10" max="120" inputmode="numeric"></div>
+          <div class="field"><label for="addAlgo">Algorithm</label>
+            <select id="addAlgo">
+              <option value="SHA1" selected>SHA1</option>
+              <option value="SHA256">SHA256</option>
+              <option value="SHA512">SHA512</option>
+            </select></div>
+        </div>
+        <div id="addErr" class="hidden"></div>
+        <button id="addGo" class="primary">Add account</button>
+      </div>
+    </details>
+
+    <details>
+      <summary>Paste otpauth:// links or bare secrets</summary>
+      <div class="card">
+        <p class="muted tiny">One per line. Accepts <code class="mono">otpauth://totp/…?secret=…&amp;issuer=…</code>
+        or just the base32 key.</p>
+        <div class="field"><textarea id="uriText" placeholder="otpauth://totp/GitHub:me?secret=JBSWY3DPEHPK3PXP&issuer=GitHub"></textarea></div>
+        <div id="uriErr" class="hidden"></div>
+        <button id="uriGo" class="primary">Import</button>
+      </div>
+    </details>
+
+    <details>
+      <summary>Backup, restore &amp; settings</summary>
+      <div class="card">
+        <h3>Backup</h3>
+        <div class="btnrow">
+          <button id="exportBtn" class="primary small">Export encrypted backup</button>
+          <button id="exportPlainBtn" class="small danger">Export plaintext JSON</button>
+        </div>
+        <p class="muted tiny">The encrypted backup needs your current password to restore. The plaintext export
+        does not — keep it somewhere safe and delete it when you are done.</p>
+        <div class="hr"></div>
+        <h3>Restore</h3>
+        <div class="field"><label for="importFile">Vault file (.json)</label>
+          <input id="importFile" type="file" accept=".json,*/*"></div>
+        <div class="field"><label for="restorePw">Password for that backup (leave empty for a plaintext export)</label>
+          <input id="restorePw" type="password" autocomplete="off" autocapitalize="off" spellcheck="false"></div>
+        <div id="restoreErr" class="hidden"></div>
+        <div class="btnrow"><button id="restoreGo" class="small primary">Restore</button></div>
+        <div class="hr"></div>
+        <h3>Change password</h3>
+        <div class="field"><label for="changePwOld">Current password</label>
+          <input id="changePwOld" type="password" autocomplete="current-password" autocapitalize="off" spellcheck="false"></div>
+        <div class="field"><label for="changePw">New password</label>
+          <input id="changePw" type="password" autocomplete="new-password" autocapitalize="off" spellcheck="false"></div>
+        <div id="changeErr" class="hidden"></div>
+        <button id="changeGo" class="small">Change password</button>
+      </div>
+    </details>
+
+    <div class="card tight muted tiny">
+      <b>How this stays safe:</b> everything runs in this one file. No fonts, no scripts, no images from the
+      internet — the page cannot contact any server even if you are online. Your codes are encrypted with
+      AES-256 using a key derived from your password, and the password itself is never stored.
+    </div>
+  </div>
+</div>
+
+<div id="toast" class="hidden" style="position:fixed;left:50%;transform:translateX(-50%);bottom:24px;
+  background:#2b3240;color:#fff;padding:9px 16px;border-radius:20px;font-size:13px;z-index:50;
+  box-shadow:0 6px 20px rgba(0,0,0,.35);"></div>
+
+<script>
+/* Pure-JS crypto core: SHA-1/256/512, HMAC, PBKDF2, AES-256-CBC, Base32, HOTP/TOTP.
+   No external dependencies, no WebCrypto requirement (works from file:// too). */
+(function (global) {
+  'use strict';
+
+  /* ---------------- bytes / text helpers ---------------- */
+  function utf8Bytes(str) {
+    if (typeof TextEncoder !== 'undefined') return new TextEncoder().encode(str);
+    var out = [];
+    for (var i = 0; i < str.length; i++) {
+      var c = str.charCodeAt(i);
+      if (c < 0x80) out.push(c);
+      else if (c < 0x800) out.push(0xC0 | (c >> 6), 0x80 | (c & 63));
+      else if (c < 0x10000) out.push(0xE0 | (c >> 12), 0x80 | ((c >> 6) & 63), 0x80 | (c & 63));
+      else {
+        c -= 0x10000;
+        out.push(0xF0 | (c >> 18), 0x80 | ((c >> 12) & 63), 0x80 | ((c >> 6) & 63), 0x80 | (c & 63));
+      }
+    }
+    return new Uint8Array(out);
+  }
+  function utf8Str(b) {
+    if (typeof TextDecoder !== 'undefined') return new TextDecoder().decode(b);
+    var s = '', i = 0;
+    while (i < b.length) {
+      var c = b[i++];
+      if (c < 0x80) s += String.fromCharCode(c);
+      else if (c < 0xE0) s += String.fromCharCode(((c & 31) << 6) | (b[i++] & 63));
+      else if (c < 0xF0) s += String.fromCharCode(((c & 15) << 12) | ((b[i++] & 63) << 6) | (b[i++] & 63));
+      else {
+        var u = ((c & 7) << 18) | ((b[i++] & 63) << 12) | ((b[i++] & 63) << 6) | (b[i++] & 63);
+        s += String.fromCharCode(0xD800 + ((u - 0x10000) >> 10), 0xDC00 + ((u - 0x10000) & 1023));
+      }
+    }
+    return s;
+  }
+  function bytesToHex(b) {
+    var s = '';
+    for (var i = 0; i < b.length; i++) { var h = b[i].toString(16); s += h.length < 2 ? '0' + h : h; }
+    return s;
+  }
+  function hexToBytes(h) {
+    h = String(h).replace(/[^0-9a-fA-F]/g, '');
+    var out = new Uint8Array(h.length >> 1);
+    for (var i = 0; i < out.length; i++) out[i] = parseInt(h.substr(i * 2, 2), 16);
+    return out;
+  }
+  function concatBytes(a, b) {
+    var out = new Uint8Array(a.length + b.length);
+    out.set(a, 0); out.set(b, a.length);
+    return out;
+  }
+  function bytesEqual(a, b) {
+    if (a.length !== b.length) return false;
+    var d = 0;
+    for (var i = 0; i < a.length; i++) d |= a[i] ^ b[i];
+    return d === 0;
+  }
+  function toB64(b) {
+    var s = '', CH = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+    for (var i = 0; i < b.length; i += 3) {
+      var n = (b[i] << 16) | ((i + 1 < b.length ? b[i + 1] : 0) << 8) | (i + 2 < b.length ? b[i + 2] : 0);
+      var r = b.length - i;
+      s += CH[(n >> 18) & 63] + CH[(n >> 12) & 63] + (r > 1 ? CH[(n >> 6) & 63] : '=') + (r > 2 ? CH[n & 63] : '=');
+    }
+    return s;
+  }
+  function fromB64(str) {
+    var CH = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+    str = String(str).replace(/[^A-Za-z0-9+/]/g, '');
+    var out = [], buf = 0, bits = 0;
+    for (var i = 0; i < str.length; i++) {
+      buf = (buf << 6) | CH.indexOf(str[i]); bits += 6;
+      if (bits >= 8) { bits -= 8; out.push((buf >> bits) & 0xff); }
+    }
+    return new Uint8Array(out);
+  }
+  function randomBytes(n) {
+    var out = new Uint8Array(n);
+    if (global.crypto && global.crypto.getRandomValues) { global.crypto.getRandomValues(out); return out; }
+    if (global.msCrypto && global.msCrypto.getRandomValues) { global.msCrypto.getRandomValues(out); return out; }
+    if (typeof require === 'function') { try { return new Uint8Array(require('crypto').randomBytes(n)); } catch (e) { } }
+    // Never fall back to Math.random: these bytes are the vault salt and IV.
+    // Failing loudly is far better than encrypting secrets with guessable values.
+    throw new Error('This browser does not provide a secure random number generator (crypto.getRandomValues), so codes cannot be encrypted safely here.');
+  }
+
+  /* ---------------- bigint helpers (for constant generation) ---------------- */
+  function isqrt(n) {
+    if (n < 2n) return n;
+    var x = 1n << BigInt(Math.ceil(n.toString(2).length / 2));
+    while (true) { var y = (x + n / x) >> 1n; if (y >= x) break; x = y; }
+    return x;
+  }
+  function icbrt(n) {
+    if (n < 2n) return n;
+    var x = 1n << BigInt(Math.ceil(n.toString(2).length / 3));
+    while (true) { var y = (2n * x + n / (x * x)) / 3n; if (y >= x) break; x = y; }
+    return x;
+  }
+  function firstPrimes(n) {
+    var out = [], v = 2;
+    while (out.length < n) {
+      var ok = true;
+      for (var i = 0; i < out.length && out[i] * out[i] <= v; i++) if (v % out[i] === 0) { ok = false; break; }
+      if (ok) out.push(v);
+      v++;
+    }
+    return out;
+  }
+
+  /* ---------------- SHA-1 ---------------- */
+  function sha1(msg) {
+    msg = msg instanceof Uint8Array ? msg : utf8Bytes(String(msg));
+    var len = msg.length;
+    var total = (((len + 8) >> 6) + 1) << 6;
+    var buf = new Uint8Array(total);
+    buf.set(msg);
+    buf[len] = 0x80;
+    var dv = new DataView(buf.buffer);
+    dv.setUint32(total - 8, Math.floor(len * 8 / 4294967296), false);
+    dv.setUint32(total - 4, (len * 8) >>> 0, false);
+    var h0 = 0x67452301, h1 = 0xEFCDAB89, h2 = 0x98BADCFE, h3 = 0x10325476, h4 = 0xC3D2E1F0;
+    var w = new Uint32Array(80);
+    for (var off = 0; off < total; off += 64) {
+      for (var t = 0; t < 16; t++) w[t] = dv.getUint32(off + t * 4, false);
+      for (t = 16; t < 80; t++) w[t] = rotl32(w[t - 3] ^ w[t - 8] ^ w[t - 14] ^ w[t - 16], 1);
+      var a = h0, b = h1, c = h2, d = h3, e = h4;
+      for (t = 0; t < 80; t++) {
+        var f, k;
+        if (t < 20) { f = (b & c) | (~b & d); k = 0x5A827999; }
+        else if (t < 40) { f = b ^ c ^ d; k = 0x6ED9EBA1; }
+        else if (t < 60) { f = (b & c) | (b & d) | (c & d); k = 0x8F1BBCDC; }
+        else { f = b ^ c ^ d; k = 0xCA62C1D6; }
+        var tmp = (rotl32(a, 5) + f + e + k + w[t]) >>> 0;
+        e = d; d = c; c = rotl32(b, 30); b = a; a = tmp;
+      }
+      h0 = (h0 + a) >>> 0; h1 = (h1 + b) >>> 0; h2 = (h2 + c) >>> 0; h3 = (h3 + d) >>> 0; h4 = (h4 + e) >>> 0;
+    }
+    var out = new Uint8Array(20), odv = new DataView(out.buffer);
+    odv.setUint32(0, h0, false); odv.setUint32(4, h1, false); odv.setUint32(8, h2, false);
+    odv.setUint32(12, h3, false); odv.setUint32(16, h4, false);
+    return out;
+  }
+  function rotl32(x, n) { return ((x << n) | (x >>> (32 - n))) >>> 0; }
+
+  /* ---------------- SHA-256 ---------------- */
+  var K256 = null, H256 = null;
+  function initSha256() {
+    if (K256) return;
+    var p = firstPrimes(64);
+    H256 = new Uint32Array(8);
+    for (var i = 0; i < 8; i++) H256[i] = Number(isqrt(BigInt(p[i]) << 64n) & 0xffffffffn);
+    K256 = new Uint32Array(64);
+    for (i = 0; i < 64; i++) K256[i] = Number(icbrt(BigInt(p[i]) << 96n) & 0xffffffffn);
+  }
+  function sha256(msg) {
+    initSha256();
+    msg = msg instanceof Uint8Array ? msg : utf8Bytes(String(msg));
+    var len = msg.length;
+    var total = (((len + 8) >> 6) + 1) << 6;
+    var buf = new Uint8Array(total);
+    buf.set(msg); buf[len] = 0x80;
+    var dv = new DataView(buf.buffer);
+    dv.setUint32(total - 8, Math.floor(len * 8 / 4294967296), false);
+    dv.setUint32(total - 4, (len * 8) >>> 0, false);
+    var h = new Uint32Array(H256), w = new Uint32Array(64);
+    for (var off = 0; off < total; off += 64) {
+      for (var t = 0; t < 16; t++) w[t] = dv.getUint32(off + t * 4, false);
+      for (t = 16; t < 64; t++) {
+        var s0 = (rotr32(w[t - 15], 7) ^ rotr32(w[t - 15], 18) ^ (w[t - 15] >>> 3)) >>> 0;
+        var s1 = (rotr32(w[t - 2], 17) ^ rotr32(w[t - 2], 19) ^ (w[t - 2] >>> 10)) >>> 0;
+        w[t] = (w[t - 16] + s0 + w[t - 7] + s1) >>> 0;
+      }
+      var a = h[0], b = h[1], c = h[2], d = h[3], e = h[4], f = h[5], g = h[6], hh = h[7];
+      for (t = 0; t < 64; t++) {
+        var S1 = (rotr32(e, 6) ^ rotr32(e, 11) ^ rotr32(e, 25)) >>> 0;
+        var ch = ((e & f) ^ (~e & g)) >>> 0;
+        var t1 = (hh + S1 + ch + K256[t] + w[t]) >>> 0;
+        var S0 = (rotr32(a, 2) ^ rotr32(a, 13) ^ rotr32(a, 22)) >>> 0;
+        var maj = ((a & b) ^ (a & c) ^ (b & c)) >>> 0;
+        var t2 = (S0 + maj) >>> 0;
+        hh = g; g = f; f = e; e = (d + t1) >>> 0; d = c; c = b; b = a; a = (t1 + t2) >>> 0;
+      }
+      h[0] = (h[0] + a) >>> 0; h[1] = (h[1] + b) >>> 0; h[2] = (h[2] + c) >>> 0; h[3] = (h[3] + d) >>> 0;
+      h[4] = (h[4] + e) >>> 0; h[5] = (h[5] + f) >>> 0; h[6] = (h[6] + g) >>> 0; h[7] = (h[7] + hh) >>> 0;
+    }
+    var out = new Uint8Array(32), odv = new DataView(out.buffer);
+    for (var i = 0; i < 8; i++) odv.setUint32(i * 4, h[i], false);
+    return out;
+  }
+  function rotr32(x, n) { return ((x >>> n) | (x << (32 - n))) >>> 0; }
+
+  /* ---------------- SHA-512 (BigInt based, used rarely) ---------------- */
+  var K512 = null, H512 = null;
+  function initSha512() {
+    if (K512) return;
+    var p = firstPrimes(80), M = (1n << 64n) - 1n;
+    H512 = []; K512 = [];
+    for (var i = 0; i < 8; i++) H512.push(isqrt(BigInt(p[i]) << 128n) & M);
+    for (i = 0; i < 80; i++) K512.push(icbrt(BigInt(p[i]) << 192n) & M);
+  }
+  function sha512(msg) {
+    initSha512();
+    msg = msg instanceof Uint8Array ? msg : utf8Bytes(String(msg));
+    var len = msg.length;
+    var total = (((len + 16) >> 7) + 1) << 7;
+    var buf = new Uint8Array(total);
+    buf.set(msg); buf[len] = 0x80;
+    var dv = new DataView(buf.buffer);
+    dv.setUint32(total - 4, (len * 8) >>> 0, false);
+    var M = (1n << 64n) - 1n;
+    var rotr = function (x, n) { return ((x >> BigInt(n)) | (x << BigInt(64 - n))) & M; };
+    var h = H512.slice();
+    var w = new Array(80);
+    for (var off = 0; off < total; off += 128) {
+      for (var t = 0; t < 16; t++) {
+        w[t] = (BigInt(dv.getUint32(off + t * 8, false)) << 32n) | BigInt(dv.getUint32(off + t * 8 + 4, false));
+      }
+      for (t = 16; t < 80; t++) {
+        var s0 = rotr(w[t - 15], 1) ^ rotr(w[t - 15], 8) ^ (w[t - 15] >> 7n);
+        var s1 = rotr(w[t - 2], 19) ^ rotr(w[t - 2], 61) ^ (w[t - 2] >> 6n);
+        w[t] = (w[t - 16] + s0 + w[t - 7] + s1) & M;
+      }
+      var a = h[0], b = h[1], c = h[2], d = h[3], e = h[4], f = h[5], g = h[6], hh = h[7];
+      for (t = 0; t < 80; t++) {
+        var S1 = rotr(e, 14) ^ rotr(e, 18) ^ rotr(e, 41);
+        var ch = (e & f) ^ (~e & g & M);
+        var t1 = (hh + S1 + ch + K512[t] + w[t]) & M;
+        var S0 = rotr(a, 28) ^ rotr(a, 34) ^ rotr(a, 39);
+        var maj = (a & b) ^ (a & c) ^ (b & c);
+        var t2 = (S0 + maj) & M;
+        hh = g; g = f; f = e; e = (d + t1) & M; d = c; c = b; b = a; a = (t1 + t2) & M;
+      }
+      h[0] = (h[0] + a) & M; h[1] = (h[1] + b) & M; h[2] = (h[2] + c) & M; h[3] = (h[3] + d) & M;
+      h[4] = (h[4] + e) & M; h[5] = (h[5] + f) & M; h[6] = (h[6] + g) & M; h[7] = (h[7] + hh) & M;
+    }
+    var out = new Uint8Array(64), odv = new DataView(out.buffer);
+    for (var i = 0; i < 8; i++) {
+      odv.setUint32(i * 8, Number((h[i] >> 32n) & 0xffffffffn), false);
+      odv.setUint32(i * 8 + 4, Number(h[i] & 0xffffffffn), false);
+    }
+    return out;
+  }
+
+  /* ---------------- HMAC ---------------- */
+  function hmac(hashFn, blockSize, key, msg) {
+    key = key instanceof Uint8Array ? key : utf8Bytes(String(key));
+    msg = msg instanceof Uint8Array ? msg : utf8Bytes(String(msg));
+    if (key.length > blockSize) key = hashFn(key);
+    var ipad = new Uint8Array(blockSize), opad = new Uint8Array(blockSize);
+    ipad.fill(0x36); opad.fill(0x5c);
+    for (var i = 0; i < blockSize; i++) {
+      var k = i < key.length ? key[i] : 0;
+      ipad[i] ^= k; opad[i] ^= k;
+    }
+    var inner = hashFn(concatBytes(ipad, msg));
+    return hashFn(concatBytes(opad, inner));
+  }
+  function hmacSha1(k, m) { return hmac(sha1, 64, k, m); }
+  function hmacSha256(k, m) { return hmac(sha256, 64, k, m); }
+  function hmacSha512(k, m) { return hmac(sha512, 128, k, m); }
+
+  /* ---------------- PBKDF2 ---------------- */
+  function pbkdf2(hashFn, blockSize, pass, salt, iter, dkLen) {
+    pass = pass instanceof Uint8Array ? pass : utf8Bytes(String(pass));
+    salt = salt instanceof Uint8Array ? salt : utf8Bytes(String(salt));
+    var hLen = hashFn(new Uint8Array(0)).length;
+    var blocks = Math.ceil(dkLen / hLen);
+    var out = new Uint8Array(blocks * hLen);
+    var u = new Uint8Array(blockSize), t = new Uint8Array(blockSize);
+    for (var b = 1; b <= blocks; b++) {
+      var saltBlock = concatBytes(salt, new Uint8Array([(b >> 24) & 255, (b >> 16) & 255, (b >> 8) & 255, b & 255]));
+      u = hmac(hashFn, blockSize, pass, saltBlock);
+      t.set(u);
+      for (var i = 1; i < iter; i++) {
+        u = hmac(hashFn, blockSize, pass, u);
+        for (var j = 0; j < hLen; j++) t[j] ^= u[j];
+      }
+      out.set(t.subarray(0, hLen), (b - 1) * hLen);
+    }
+    return out.subarray(0, dkLen);
+  }
+  /* Async version: uses WebCrypto when available (much faster), else pure JS. */
+  function pbkdf2Async(alg, pass, salt, iter, dkLen) {
+    // accept 'SHA1' / 'SHA-1' / 'sha256' ... WebCrypto needs the dashed form
+    var a = String(alg).toUpperCase().replace(/-/g, '');
+    var webName = a === 'SHA1' ? 'SHA-1' : (a === 'SHA512' ? 'SHA-512' : 'SHA-256');
+    var fn = a === 'SHA1' ? sha1 : (a === 'SHA512' ? sha512 : sha256);
+    var bs = a === 'SHA512' ? 128 : 64;
+    var sub = global.crypto && global.crypto.subtle;
+    var passBytes = pass instanceof Uint8Array ? pass : utf8Bytes(String(pass));
+    var saltBytes = salt instanceof Uint8Array ? salt : utf8Bytes(String(salt));
+    if (!sub || typeof Promise === 'undefined') {
+      return Promise.resolve(pbkdf2(fn, bs, passBytes, saltBytes, iter, dkLen));
+    }
+    try {
+      return sub.importKey('raw', passBytes, 'PBKDF2', false, ['deriveBits']).then(function (k) {
+        return sub.deriveBits({ name: 'PBKDF2', salt: saltBytes, iterations: iter, hash: webName }, k, dkLen * 8);
+      }).then(function (bits) {
+        return new Uint8Array(bits);
+      }).catch(function () {
+        return pbkdf2(fn, bs, passBytes, saltBytes, iter, dkLen);
+      });
+    } catch (e) {
+      return Promise.resolve(pbkdf2(fn, bs, pass, salt, iter, dkLen));
+    }
+  }
+
+  /* ---------------- AES-256 ---------------- */
+  var SBOX = null, INV_SBOX = null;
+  function gmul(a, b) {
+    var r = 0;
+    for (var i = 0; i < 8; i++) {
+      if (b & 1) r ^= a;
+      var hi = a & 0x80;
+      a = (a << 1) & 0xff;
+      if (hi) a ^= 0x1b;
+      b >>= 1;
+    }
+    return r & 0xff;
+  }
+  function aesInit() {
+    if (SBOX) return;
+    var i, j;
+    // multiplicative inverses in GF(2^8) (AES polynomial 0x11b is irreducible but NOT
+    // primitive, so x has order 51 - log/antilog tables over 2^i would be wrong.
+    // brute force is 65k multiplies, a few ms, and impossible to get subtly wrong.
+    var inv = new Uint8Array(256);
+    inv[0] = 0;
+    for (i = 1; i < 256; i++) {
+      for (j = 1; j < 256; j++) { if (gmul(i, j) === 1) { inv[i] = j; break; } }
+    }
+    SBOX = new Uint8Array(256); INV_SBOX = new Uint8Array(256);
+    var rotl8 = function (v, n) { return ((v << n) | (v >> (8 - n))) & 0xff; };
+    for (i = 0; i < 256; i++) {
+      var b = inv[i];
+      SBOX[i] = (b ^ rotl8(b, 1) ^ rotl8(b, 2) ^ rotl8(b, 3) ^ rotl8(b, 4) ^ 0x63) & 0xff;
+    }
+    for (i = 0; i < 256; i++) INV_SBOX[SBOX[i]] = i;
+  }
+  function keyExpansion(key) {
+    aesInit();
+    if (key.length !== 32) throw new Error('AES-256 needs a 32-byte key, got ' + key.length);
+    var rk = new Uint8Array(240), i, j;
+    rk.set(key, 0);
+    var rcon = 1, t = [0, 0, 0, 0];
+    for (i = 32; i < 240; i += 4) {
+      t[0] = rk[i - 4]; t[1] = rk[i - 3]; t[2] = rk[i - 2]; t[3] = rk[i - 1];
+      if (i % 32 === 0) {
+        var tmp = t[0];
+        t[0] = SBOX[t[1]] ^ rcon; t[1] = SBOX[t[2]]; t[2] = SBOX[t[3]]; t[3] = SBOX[tmp];
+        rcon = ((rcon << 1) ^ ((rcon & 0x80) ? 0x1b : 0)) & 0xff;
+      } else if (i % 32 === 16) {
+        for (j = 0; j < 4; j++) t[j] = SBOX[t[j]];
+      }
+      rk[i] = rk[i - 32] ^ t[0]; rk[i + 1] = rk[i - 31] ^ t[1];
+      rk[i + 2] = rk[i - 30] ^ t[2]; rk[i + 3] = rk[i - 29] ^ t[3];
+    }
+    return rk;
+  }
+  function addRoundKey(s, rk, off) { for (var i = 0; i < 16; i++) s[i] ^= rk[off + i]; }
+  function subBytes(s) { for (var i = 0; i < 16; i++) s[i] = SBOX[s[i]]; }
+  function invSubBytes(s) { for (var i = 0; i < 16; i++) s[i] = INV_SBOX[s[i]]; }
+  function shiftRows(s) {
+    var t = new Uint8Array(16), r, c;
+    for (r = 0; r < 4; r++) for (c = 0; c < 4; c++) t[r + 4 * c] = s[r + 4 * ((c + r) % 4)];
+    s.set(t);
+  }
+  function invShiftRows(s) {
+    var t = new Uint8Array(16), r, c;
+    for (r = 0; r < 4; r++) for (c = 0; c < 4; c++) t[r + 4 * ((c + r) % 4)] = s[r + 4 * c];
+    s.set(t);
+  }
+  function mixColumns(s) {
+    var t = new Uint8Array(16), c;
+    for (c = 0; c < 4; c++) {
+      var o = 4 * c, a0 = s[o], a1 = s[o + 1], a2 = s[o + 2], a3 = s[o + 3];
+      t[o] = gmul(a0, 2) ^ gmul(a1, 3) ^ a2 ^ a3;
+      t[o + 1] = a0 ^ gmul(a1, 2) ^ gmul(a2, 3) ^ a3;
+      t[o + 2] = a0 ^ a1 ^ gmul(a2, 2) ^ gmul(a3, 3);
+      t[o + 3] = gmul(a0, 3) ^ a1 ^ a2 ^ gmul(a3, 2);
+    }
+    s.set(t);
+  }
+  function invMixColumns(s) {
+    var t = new Uint8Array(16), c;
+    for (c = 0; c < 4; c++) {
+      var o = 4 * c, a0 = s[o], a1 = s[o + 1], a2 = s[o + 2], a3 = s[o + 3];
+      t[o] = gmul(a0, 14) ^ gmul(a1, 11) ^ gmul(a2, 13) ^ gmul(a3, 9);
+      t[o + 1] = gmul(a0, 9) ^ gmul(a1, 14) ^ gmul(a2, 11) ^ gmul(a3, 13);
+      t[o + 2] = gmul(a0, 13) ^ gmul(a1, 9) ^ gmul(a2, 14) ^ gmul(a3, 11);
+      t[o + 3] = gmul(a0, 11) ^ gmul(a1, 13) ^ gmul(a2, 9) ^ gmul(a3, 14);
+    }
+    s.set(t);
+  }
+  function aesEncryptBlock(rk, block) {
+    var s = new Uint8Array(block);
+    addRoundKey(s, rk, 0);
+    for (var r = 1; r < 14; r++) { subBytes(s); shiftRows(s); mixColumns(s); addRoundKey(s, rk, r * 16); }
+    subBytes(s); shiftRows(s); addRoundKey(s, rk, 224);
+    return s;
+  }
+  function aesDecryptBlock(rk, block) {
+    var s = new Uint8Array(block);
+    addRoundKey(s, rk, 224);
+    for (var r = 13; r >= 1; r--) { invShiftRows(s); invSubBytes(s); addRoundKey(s, rk, r * 16); invMixColumns(s); }
+    invShiftRows(s); invSubBytes(s); addRoundKey(s, rk, 0);
+    return s;
+  }
+  function cbcEncrypt(key, iv, data) {
+    var rk = keyExpansion(key);
+    var out = new Uint8Array(data.length), prev = new Uint8Array(iv), blk = new Uint8Array(16);
+    for (var i = 0; i < data.length; i += 16) {
+      for (var j = 0; j < 16; j++) blk[j] = data[i + j] ^ prev[j];
+      prev = aesEncryptBlock(rk, blk);
+      out.set(prev, i);
+    }
+    return out;
+  }
+  function cbcDecrypt(key, iv, data) {
+    var rk = keyExpansion(key);
+    var out = new Uint8Array(data.length), prev = new Uint8Array(iv), blk = new Uint8Array(16);
+    for (var i = 0; i < data.length; i += 16) {
+      blk.set(data.subarray(i, i + 16));
+      var d = aesDecryptBlock(rk, blk);
+      for (var j = 0; j < 16; j++) out[i + j] = d[j] ^ prev[j];
+      prev.set(data.subarray(i, i + 16));
+    }
+    return out;
+  }
+
+  /* ---------------- Base32 (RFC 4648) ---------------- */
+  function base32Decode(str) {
+    var A = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+    str = String(str).toUpperCase().replace(/[=\s\r\n-]/g, '');
+    var bits = 0, value = 0, out = [];
+    for (var i = 0; i < str.length; i++) {
+      // strict RFC 4648 alphabet: no 0/1/8 look-alike leniency, a wrong key
+      // must fail instead of silently producing a different secret.
+      var idx = A.indexOf(str[i]);
+      if (idx < 0) throw new Error('Invalid base32 character: ' + str[i]);
+      value = (value << 5) | idx; bits += 5;
+      if (bits >= 8) { bits -= 8; out.push((value >> bits) & 0xff); }
+    }
+    return new Uint8Array(out);
+  }
+  function base32Encode(bytes) {
+    var A = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+    var out = '', bits = 0, value = 0;
+    for (var i = 0; i < bytes.length; i++) {
+      value = (value << 8) | bytes[i]; bits += 8;
+      while (bits >= 5) { bits -= 5; out += A[(value >> bits) & 31]; }
+    }
+    if (bits > 0) out += A[(value << (5 - bits)) & 31];
+    return out;
+  }
+
+  /* ---------------- HOTP / TOTP ---------------- */
+  function hotp(secretBytes, counter, digits, algo) {
+    var msg = new Uint8Array(8);
+    var hi = Math.floor(counter / 4294967296);
+    msg[0] = (hi >>> 24) & 0xff; msg[1] = (hi >>> 16) & 0xff; msg[2] = (hi >>> 8) & 0xff; msg[3] = hi & 0xff;
+    msg[4] = (counter >>> 24) & 0xff; msg[5] = (counter >>> 16) & 0xff; msg[6] = (counter >>> 8) & 0xff; msg[7] = counter & 0xff;
+    var mac;
+    if (algo === 'SHA256') mac = hmacSha256(secretBytes, msg);
+    else if (algo === 'SHA512') mac = hmacSha512(secretBytes, msg);
+    else mac = hmacSha1(secretBytes, msg);
+    var off = mac[mac.length - 1] & 0x0f;
+    var bin = ((mac[off] & 0x7f) << 24) | (mac[off + 1] << 16) | (mac[off + 2] << 8) | mac[off + 3];
+    var code = bin % Math.pow(10, digits || 6);
+    return String(code).padStart(digits || 6, '0').slice(-(digits || 6));
+  }
+  function totp(secretBytes, digits, period, algo, unixSeconds) {
+    var t = (unixSeconds === undefined ? Math.floor(Date.now() / 1000) : unixSeconds);
+    period = period || 30;
+    return hotp(secretBytes, Math.floor(t / period), digits || 6, algo || 'SHA1');
+  }
+  function totpRemaining(period, unixSeconds) {
+    var t = (unixSeconds === undefined ? Math.floor(Date.now() / 1000) : unixSeconds);
+    return (period || 30) - (t % (period || 30));
+  }
+
+  var api = {
+    utf8Bytes: utf8Bytes, utf8Str: utf8Str, bytesToHex: bytesToHex, hexToBytes: hexToBytes,
+    concatBytes: concatBytes, bytesEqual: bytesEqual, toB64: toB64, fromB64: fromB64, randomBytes: randomBytes,
+    sha1: sha1, sha256: sha256, sha512: sha512,
+    hmac: hmac, hmacSha1: hmacSha1, hmacSha256: hmacSha256, hmacSha512: hmacSha512,
+    pbkdf2: pbkdf2, pbkdf2Async: pbkdf2Async,
+    cbcEncrypt: cbcEncrypt, cbcDecrypt: cbcDecrypt,
+    aesEncryptBlock: aesEncryptBlock, aesDecryptBlock: aesDecryptBlock, keyExpansion: keyExpansion,
+    base32Decode: base32Decode, base32Encode: base32Encode,
+    hotp: hotp, totp: totp, totpRemaining: totpRemaining
+  };
+  global.OTPCrypto = api;
+  if (typeof module !== 'undefined' && module.exports) module.exports = api;
+})(typeof globalThis !== 'undefined' ? globalThis : this);
+
+</script>
+<script>
+/* Offline SQLCipher(3/4) decryptor + minimal SQLite b-tree reader.
+   Used to pull secrets straight out of an Authenticator Plus `authplus.db`. */
+(function (global) {
+  'use strict';
+  var C = global.OTPCrypto;
+  var MAGIC = [0x53, 0x51, 0x4c, 0x69, 0x74, 0x65, 0x20, 0x66, 0x6f, 0x72, 0x6d, 0x61, 0x74, 0x20, 0x33, 0x00];
+
+  /* ---------- varint ---------- */
+  function readVarint(b, p) {
+    var v = 0n, i;
+    for (i = 0; i < 8; i++) {
+      v = (v << 7n) | BigInt(b[p + i] & 0x7f);
+      if ((b[p + i] & 0x80) === 0) return { value: v, next: p + i + 1 };
+    }
+    v = (v << 8n) | BigInt(b[p + 8]);
+    return { value: v, next: p + 9 };
+  }
+  function readU32BE(b, p) { return ((b[p] << 24) | (b[p + 1] << 16) | (b[p + 2] << 8) | b[p + 3]) >>> 0; }
+  function readU16BE(b, p) { return (b[p] << 8) | b[p + 1]; }
+  function u32le(n) { return new Uint8Array([n & 255, (n >> 8) & 255, (n >> 16) & 255, (n >> 24) & 255]); }
+  function readSigned(b, p, n) {
+    var v = 0, i;
+    if (n === 8) {
+      var hi = readU32BE(b, p), lo = readU32BE(b, p + 4);
+      // 64-bit signed -> Number (approximate but fine here)
+      return hi >= 0x80000000 ? -(0x10000000000000000 - (hi * 4294967296 + lo)) : hi * 4294967296 + lo;
+    }
+    for (i = 0; i < n; i++) v = v * 256 + b[p + i];
+    var sign = 1 << (n * 8 - 1);
+    return v >= sign ? v - sign * 2 : v;
+  }
+
+  /* ---------- SQLCipher ---------- */
+  var HASHES = {
+    'SHA1': { fn: function () { return C.sha1; }, bs: 64, sz: 20 },
+    'SHA256': { fn: function () { return C.sha256; }, bs: 64, sz: 32 },
+    'SHA512': { fn: function () { return C.sha512; }, bs: 128, sz: 64 }
+  };
+
+  function deriveKeysSync(passwordBytes, salt, cfg) {
+    var h = HASHES[cfg.kdf];
+    var encKey = C.pbkdf2(h.fn(), h.bs, passwordBytes, salt, cfg.iter, 32);
+    var hs = new Uint8Array(salt.length);
+    for (var i = 0; i < salt.length; i++) hs[i] = salt[i] ^ 0x3a;
+    var hmacKey = C.pbkdf2(h.fn(), h.bs, encKey, hs, cfg.fastIter || 2, 32);
+    return { encKey: encKey, hmacKey: hmacKey };
+  }
+  function deriveKeysAsync(passwordBytes, salt, cfg) {
+    var h = HASHES[cfg.kdf];
+    return C.pbkdf2Async(cfg.kdf, passwordBytes, salt, cfg.iter, 32).then(function (encKey) {
+      var hs = new Uint8Array(salt.length);
+      for (var i = 0; i < salt.length; i++) hs[i] = salt[i] ^ 0x3a;
+      return C.pbkdf2Async(cfg.kdf, encKey, hs, cfg.fastIter || 2, 32).then(function (hmacKey) {
+        return { encKey: encKey, hmacKey: hmacKey };
+      });
+    });
+  }
+  function pageMac(hmacKey, algo, data, pgno) {
+    var h = HASHES[algo];
+    var input = C.concatBytes(data, u32le(pgno));
+    if (algo === 'SHA1') return C.hmacSha1(hmacKey, input);
+    if (algo === 'SHA256') return C.hmacSha256(hmacKey, input);
+    return C.hmacSha512(hmacKey, input);
+  }
+
+  /* Try one parameter combination. Returns plaintext db or null. */
+  function tryParams(file, keys, cfg) {
+    var pageSz = cfg.pageSz, reserve = cfg.reserve, hmacSz = HASHES[cfg.hmac].sz;
+    var ph = cfg.plaintextHeader || 0;
+    var off = ph ? ph : 16;
+    var size1 = pageSz - off - reserve;
+    var size = pageSz - reserve;
+    if (size1 <= 0 || size <= 0) return null;
+    if (file.length < off + size1 + 16 + hmacSz) return null;
+    if (file.length % pageSz !== 0) return null;
+
+    /* --- page 1 --- */
+    var in1 = file.subarray(off, off + size1);
+    var iv1 = file.subarray(off + size1, off + size1 + 16);
+    var mac1 = file.subarray(off + size1 + 16, off + size1 + 16 + hmacSz);
+    var calc1 = pageMac(keys.hmacKey, cfg.hmac, file.subarray(off, off + size1 + 16), 1);
+    if (!C.bytesEqual(mac1, calc1.subarray(0, hmacSz))) return null;
+
+    var body1 = C.cbcDecrypt(keys.encKey, iv1, in1);
+    var head = ph ? file.subarray(0, ph) : new Uint8Array(MAGIC);
+    var page1 = new Uint8Array(pageSz);
+    page1.set(head.subarray(0, Math.min(head.length, off)), 0);
+    page1.set(body1, off);
+    for (var m = 0; m < 16; m++) if (page1[m] !== MAGIC[m]) return null;
+
+    var declPage = readU16BE(page1, 16);
+    if (declPage === 1) declPage = 65536;
+    if (declPage !== pageSz) return null;
+    if (page1[20] !== reserve) return null;
+
+    /* --- remaining pages --- */
+    var nPages = Math.floor(file.length / pageSz);
+    var out = new Uint8Array(file.length);
+    out.set(page1, 0);
+    for (var n = 2; n <= nPages; n++) {
+      var base = (n - 1) * pageSz;
+      var data = file.subarray(base, base + size + 16);
+      var macN = file.subarray(base + size + 16, base + size + 16 + hmacSz);
+      var calcN = pageMac(keys.hmacKey, cfg.hmac, data, n);
+      if (!C.bytesEqual(macN, calcN.subarray(0, hmacSz))) {
+        return { partial: true, db: out.subarray(0, base), pageSz: pageSz, reserve: reserve, failedPage: n };
+      }
+      var plain = C.cbcDecrypt(keys.encKey, file.subarray(base + size, base + size + 16), file.subarray(base, base + size));
+      out.set(plain, base);
+    }
+    return { db: out, pageSz: pageSz, reserve: reserve, cfg: cfg };
+  }
+
+  var PAGE_SIZES = [1024, 4096, 2048, 8192, 512, 16384, 32768, 65536];
+  var RESERVES = [48, 16, 32, 64, 80, 96, 112, 128];
+
+  function attempt(file, keys, base) {
+    var tried = [];
+    for (var pi = 0; pi < PAGE_SIZES.length; pi++) {
+      for (var ri = 0; ri < RESERVES.length; ri++) {
+        var cfg = {
+          pageSz: PAGE_SIZES[pi], reserve: RESERVES[ri], hmac: base.hmac,
+          kdf: base.kdf, iter: base.iter, fastIter: base.fastIter || 2,
+          plaintextHeader: base.plaintextHeader || 0
+        };
+        var r = tryParams(file, keys, cfg);
+        if (r) { r.tried = tried; return r; }
+        tried.push(PAGE_SIZES[pi] + '/' + RESERVES[ri]);
+      }
+    }
+    return null;
+  }
+
+  /* Ordered list of SQLCipher profiles to try.
+     Note: SQLCipher 1 (no HMAC at all) is deliberately NOT listed. tryParams always
+     verifies a page MAC, so a profile that cannot verify one could never succeed
+     and would only burn PBKDF2 iterations. Supporting it would need a separate
+     decrypt path with no integrity check, which this tool does not offer. */
+  var PROFILES = [
+    { name: 'SQLCipher 3 defaults', kdf: 'SHA1', hmac: 'SHA1', iter: 64000, plaintextHeader: 0 },
+    { name: 'SQLCipher 3 (4k iter)', kdf: 'SHA1', hmac: 'SHA1', iter: 4000, plaintextHeader: 0 },
+    { name: 'SQLCipher 4 defaults', kdf: 'SHA512', hmac: 'SHA512', iter: 256000, plaintextHeader: 32 },
+    { name: 'SQLCipher 4 (plaintext hdr 32, sha1)', kdf: 'SHA1', hmac: 'SHA1', iter: 64000, plaintextHeader: 32 },
+    { name: 'SQLCipher 4 defaults (no plaintext hdr)', kdf: 'SHA512', hmac: 'SHA512', iter: 256000, plaintextHeader: 0 },
+    { name: 'SHA256 kdf/hmac, 64000', kdf: 'SHA256', hmac: 'SHA256', iter: 64000, plaintextHeader: 0 }
+  ];
+
+  // Sync path has no WebCrypto (or it failed): skip the very slow SHA-512 profiles.
+  var PROFILES_SYNC = PROFILES.filter(function (p) { return p.kdf !== 'SHA512'; });
+
+  function decryptSqlcipherSync(file, passwordBytes) {
+    if (file.length < 512) throw new Error('File too small to be a SQLite database');
+    var salt = file.subarray(0, 16);
+    var errors = [];
+    for (var i = 0; i < PROFILES_SYNC.length; i++) {
+      var p = PROFILES_SYNC[i];
+      var keys;
+      try { keys = deriveKeysSync(passwordBytes, salt, p); }
+      catch (e) { errors.push(p.name + ': ' + e.message); continue; }
+      var r = attempt(file, keys, p);
+      if (r) { r.profile = p.name; return r; }
+      errors.push(p.name);
+    }
+    var err = new Error('Could not open the database — wrong password, or unsupported encryption settings.');
+    err.tried = errors;
+    throw err;
+  }
+
+  function decryptSqlcipherAsync(file, passwordBytes, onProgress) {
+    if (file.length < 512) return Promise.reject(new Error('File too small to be a SQLite database'));
+    var salt = file.subarray(0, 16);
+    var i = 0;
+    function next() {
+      if (i >= PROFILES.length) {
+        return Promise.reject(new Error('Could not open the database — wrong password, or unsupported encryption settings.'));
+      }
+      var p = PROFILES[i++];
+      if (onProgress) onProgress(p.name);
+      return deriveKeysAsync(passwordBytes, salt, p).then(function (keys) {
+        // yield to the UI between heavy derivations
+        return new Promise(function (res) { setTimeout(res, 0); }).then(function () {
+          return { keys: keys, r: attempt(file, keys, p), p: p };
+        });
+      }).then(function (out) {
+        if (out.r) { out.r.profile = out.p.name; return out.r; }
+        return next();
+      });
+    }
+    return next();
+  }
+
+  /* ---------- minimal SQLite reader ---------- */
+  function parseDb(db) {
+    var pageSz = readU16BE(db, 16); if (pageSz === 1) pageSz = 65536;
+    var reserved = db[20];
+    var usable = pageSz - reserved;
+    var nPages = readU32BE(db, 28);
+    if (nPages * pageSz > db.length) nPages = Math.floor(db.length / pageSz);
+
+    function page(n) { return db.subarray((n - 1) * pageSz, n * pageSz); }
+    function cellPayload(pageBytes, off, isLeaf) {
+      var vi = readVarint(pageBytes, off);
+      var payloadSize = Number(vi.value);
+      var p = vi.next;
+      var rowid = null;
+      if (isLeaf) { var rv = readVarint(pageBytes, p); rowid = rv.value; p = rv.next; }
+      var maxLocal = usable - 35;
+      var minLocal = Math.floor((usable - 12) * 32 / 255) - 23;
+      var local = payloadSize;
+      var overflow = null;
+      if (payloadSize > maxLocal) {
+        local = minLocal + ((payloadSize - minLocal) % (usable - 4));
+        if (local > maxLocal) local = minLocal;
+        overflow = readU32BE(pageBytes, off + (p - off) + local);
+      }
+      var bytes = pageBytes.subarray(p, p + local);
+      if (overflow) {
+        var chunks = [bytes], pg = overflow, guard = 0;
+        while (pg && guard++ < 100000) {
+          var op = page(pg);
+          var nxt = readU32BE(op, 0);
+          chunks.push(op.subarray(4, usable));
+          pg = nxt;
+        }
+        var total = 0; for (var i = 0; i < chunks.length; i++) total += chunks[i].length;
+        var all = new Uint8Array(total), at = 0;
+        for (i = 0; i < chunks.length; i++) { all.set(chunks[i], at); at += chunks[i].length; }
+        bytes = all.subarray(0, payloadSize);
+      }
+      return { payload: bytes, rowid: rowid };
+    }
+    function decodeRecord(payload) {
+      var hv = readVarint(payload, 0);
+      var hdrSize = Number(hv.value);
+      var p = hv.next, end = hdrSize;
+      var types = [];
+      while (p < end && p < payload.length) { var t = readVarint(payload, p); types.push(Number(t.value)); p = t.next; }
+      var bp = hdrSize, vals = [];
+      for (var i = 0; i < types.length; i++) {
+        var t2 = types[i], len;
+        if (t2 === 0) { vals.push(null); }
+        else if (t2 >= 1 && t2 <= 6) { len = [0, 1, 2, 3, 4, 6, 8][t2]; vals.push(readSigned(payload, bp, len)); bp += len; }
+        else if (t2 === 7) {
+          var dv = new DataView(payload.buffer, payload.byteOffset + bp, 8);
+          vals.push(dv.getFloat64(0, false)); bp += 8;
+        }
+        else if (t2 === 8) { vals.push(0); }
+        else if (t2 === 9) { vals.push(1); }
+        else if (t2 === 10 || t2 === 11) { vals.push(null); }
+        else if (t2 % 2 === 0) { len = (t2 - 12) / 2; vals.push(payload.subarray(bp, bp + len)); bp += len; }
+        else { len = (t2 - 13) / 2; vals.push(C.utf8Str(payload.subarray(bp, bp + len))); bp += len; }
+      }
+      return vals;
+    }
+    function walk(root, cb) {
+      var stack = [root], seen = {};
+      while (stack.length) {
+        var pgno = stack.pop();
+        if (seen[pgno]) continue;
+        seen[pgno] = 1;
+        var pb = page(pgno);
+        if (pb.length < 100) continue;
+        var h = (pgno === 1) ? 100 : 0;
+        var type = pb[h];
+        var ncells = readU16BE(pb, h + 3);
+        var i;
+        if (type === 0x0d) {
+          for (i = 0; i < ncells; i++) {
+            var cp = h + 8 + i * 2;
+            if (cp + 1 >= pb.length) break;
+            var off = readU16BE(pb, cp);
+            if (off < h || off >= usable) continue;
+            try {
+              var rec = cellPayload(pb, off, true);
+              cb(decodeRecord(rec.payload), rec.rowid);
+            } catch (e) { /* skip corrupt cell */ }
+          }
+        } else if (type === 0x05) {
+          for (i = 0; i < ncells; i++) {
+            var cp2 = h + 12 + i * 2;
+            if (cp2 + 1 >= pb.length) break;
+            var coff = readU16BE(pb, cp2);
+            if (coff < h || coff >= usable) continue;
+            stack.push(readU32BE(pb, coff));
+          }
+          stack.push(readU32BE(pb, h + 8));
+        } else {
+          // not a table b-tree page (index page or overflow) - ignore
+        }
+      }
+    }
+
+    var tables = [];
+    var master = [];
+    walk(1, function (vals) {
+      // sqlite_master: type, name, tbl_name, rootpage, sql
+      master.push({ type: vals[0], name: vals[1], tblName: vals[2], rootpage: vals[3], sql: vals[4] });
+    });
+    master.forEach(function (m) {
+      if (m.type !== 'table') return;
+      var t = { name: m.name, sql: m.sql, rootpage: m.rootpage, columns: parseColumns(m.sql || ''), rows: [] };
+      if (t.rootpage && t.rootpage > 0) {
+        try {
+          walk(t.rootpage, function (vals) { t.rows.push(vals); });
+        } catch (e) { t.error = e.message; }
+      }
+      tables.push(t);
+    });
+    return { pageSz: pageSz, reserved: reserved, usable: usable, nPages: nPages, tables: tables, master: master };
+  }
+
+  function parseColumns(sql) {
+    var open = sql.indexOf('(');
+    var close = sql.lastIndexOf(')');
+    if (open < 0) return [];
+    var body = sql.slice(open + 1, close < 0 ? sql.length : close);
+    var parts = [], cur = '', depth = 0, q = null;
+    for (var i = 0; i < body.length; i++) {
+      var ch = body[i];
+      if (q) { cur += ch; if (ch === q) q = null; continue; }
+      if (ch === '"' || ch === "'" || ch === '`') { q = ch; cur += ch; continue; }
+      if (ch === '[') { q = ']'; cur += ch; continue; }
+      if (ch === '(') { depth++; cur += ch; continue; }
+      if (ch === ')') { depth--; cur += ch; continue; }
+      if (ch === ',' && depth === 0) { parts.push(cur); cur = ''; continue; }
+      cur += ch;
+    }
+    if (cur.trim()) parts.push(cur);
+    var cols = [];
+    parts.forEach(function (p) {
+      p = p.trim();
+      if (!p) return;
+      if (/^(constraint|primary|unique|check|foreign|exclude)\b/i.test(p)) return;
+      var m = p.match(/^["'`\[]?([^"'`\[\]\s]+)/);
+      if (m) cols.push(m[1]);
+    });
+    return cols;
+  }
+
+  /* ---------- Authenticator Plus specific extraction ---------- */
+  function extractAccounts(parsed) {
+    var warnings = [];
+    var tables = parsed.tables.filter(function (t) { return t.rows.length > 0 || /accounts/i.test(t.name); });
+    var t = null;
+    tables.forEach(function (x) { if (/^accounts$/i.test(x.name)) t = x; });
+    if (!t) {
+      tables.forEach(function (x) {
+        if (!t && x.columns.some(function (c) { return /^(secret|key|seed)$/i.test(c); })) t = x;
+      });
+    }
+    if (!t) {
+      return { entries: [], warnings: ['No "accounts" table found. Tables present: ' + parsed.tables.map(function (x) { return x.name; }).join(', ')] };
+    }
+    var cols = t.columns;
+    function pick(obj, names, dflt) {
+      for (var i = 0; i < names.length; i++) {
+        var k = names[i];
+        if (obj[k] !== undefined && obj[k] !== null && obj[k] !== '') return obj[k];
+        var found = Object.keys(obj).filter(function (c) { return c.toLowerCase() === k.toLowerCase(); })[0];
+        if (found !== undefined && obj[found] !== null && obj[found] !== '') return obj[found];
+      }
+      return dflt;
+    }
+    var entries = [];
+    t.rows.forEach(function (row) {
+      var o = {};
+      cols.forEach(function (c, i) { o[c] = row[i]; });
+      var secret = String(pick(o, ['secret', 'key', 'seed'], '') || '')
+        .replace(/\s+/g, '').replace(/=+$/, '').toUpperCase();
+      if (!secret) return;
+      var label = String(pick(o, ['email', 'label', 'name', 'account', 'original_name', 'username'], '') || '');
+      var issuer = String(pick(o, ['issuer', 'original_name', 'name'], '') || '');
+      var digits = parseInt(pick(o, ['digits'], 6), 10);
+      if (!digits || isNaN(digits)) digits = 6;
+      var period = parseInt(pick(o, ['period', 'time_step'], 30), 10);
+      if (!period || isNaN(period)) period = 30;
+      var type = String(pick(o, ['type', 'otp_type'], 'totp') || 'totp').toLowerCase();
+      var algo = String(pick(o, ['algorithm', 'algo'], 'SHA1') || 'SHA1').toUpperCase();
+      if (algo === 'SHA-1') algo = 'SHA1';
+      if (algo !== 'SHA1' && algo !== 'SHA256' && algo !== 'SHA512') algo = 'SHA1';
+      entries.push({
+        issuer: issuer, label: label, secret: secret,
+        digits: digits, period: period, type: type === 'hotp' ? 'hotp' : 'totp',
+        algo: algo,
+        counter: parseInt(pick(o, ['counter'], 0), 10) || 0
+      });
+    });
+    return { entries: entries, warnings: warnings, table: t.name, columns: cols };
+  }
+
+  var api = {
+    decryptSqlcipherSync: decryptSqlcipherSync,
+    decryptSqlcipherAsync: decryptSqlcipherAsync,
+    deriveKeysSync: deriveKeysSync,
+    deriveKeysAsync: deriveKeysAsync,
+    tryParams: tryParams,
+    parseDb: parseDb,
+    parseColumns: parseColumns,
+    extractAccounts: extractAccounts,
+    readVarint: readVarint,
+    PROFILES: PROFILES
+  };
+  global.OTPSqlite = api;
+  if (typeof module !== 'undefined' && module.exports) module.exports = api;
+})(typeof globalThis !== 'undefined' ? globalThis : this);
+
+</script>
+<script>
+/* Offline TOTP authenticator - app logic. No network, no external assets. */
+(function () {
+  'use strict';
+  var C = window.OTPCrypto, S = window.OTPSqlite;
+  var $ = function (id) { return document.getElementById(id); };
+  var enc = C.utf8Bytes, dec = C.utf8Str, b64 = C.toB64, unb64 = C.fromB64;
+
+  /* ---------------- storage (best effort) ---------------- */
+  var STORE_KEY = 'totp-offline-vault-v1';
+  var memStore = {};
+  var storageOK = (function () {
+    try {
+      var k = '__t__' + Date.now();
+      window.localStorage.setItem(k, '1');
+      window.localStorage.removeItem(k);
+      return true;
+    } catch (e) { return false; }
+  })();
+  function storeGet(k) {
+    try { return storageOK ? window.localStorage.getItem(k) : (memStore[k] || null); }
+    catch (e) { return memStore[k] || null; }
+  }
+  function storeSet(k, v) {
+    try { if (storageOK) { window.localStorage.setItem(k, v); return true; } } catch (e) { }
+    memStore[k] = v; return false;
+  }
+  function storeDel(k) {
+    try { if (storageOK) window.localStorage.removeItem(k); } catch (e) { }
+    delete memStore[k];
+  }
+
+  /* ---------------- vault state ---------------- */
+  var state = {
+    mode: 'loading',      // loading | setup | locked | unlocked
+    key: null,            // Uint8Array master key (memory only)
+    hmacKey: null,
+    vault: null,          // {entries:[...]}
+    raw: null,            // encrypted blob string currently in storage
+    filter: '',
+    revealed: {}
+  };
+
+  function newId() { return 'e' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
+
+  function emptyVault() { return { v: 1, entries: [] }; }
+
+  /* vault file format:  OTPV1.<saltB64>.<ivB64>.<ctB64>.<macB64> */
+  function pad16(b) {
+    var n = 16 - (b.length % 16);
+    var out = new Uint8Array(b.length + n);
+    out.set(b, 0);
+    for (var i = b.length; i < out.length; i++) out[i] = n;
+    return out;
+  }
+  function unpad16(b) {
+    if (b.length === 0 || b.length % 16 !== 0) throw new Error('Vault contents are not readable.');
+    var n = b[b.length - 1];
+    if (n < 1 || n > 16 || n > b.length) throw new Error('Vault contents are not readable.');
+    for (var i = b.length - n; i < b.length; i++) if (b[i] !== n) throw new Error('Vault contents are not readable.');
+    return b.subarray(0, b.length - n);
+  }
+
+  function sealVault(vault, key, hmacKey) {
+    var plain = pad16(enc(JSON.stringify(vault)));
+    var iv = C.randomBytes(16);
+    var ct = C.cbcEncrypt(key, iv, plain);
+    var mac = C.hmacSha256(hmacKey, C.concatBytes(iv, ct));
+    return 'OTPV1.' + b64(state.salt) + '.' + b64(iv) + '.' + b64(ct) + '.' + b64(mac);
+  }
+  function openVault(blob, key, hmacKey) {
+    var parts = String(blob).split('.');
+    if (parts.length !== 5 || parts[0] !== 'OTPV1') throw new Error('Not a valid vault file');
+    var salt = unb64(parts[1]), iv = unb64(parts[2]), ct = unb64(parts[3]), mac = unb64(parts[4]);
+    var calc = C.hmacSha256(hmacKey, C.concatBytes(iv, ct));
+    if (!C.bytesEqual(mac, calc)) throw new Error('Wrong password, or the vault file is corrupted.');
+    var plain = unpad16(C.cbcDecrypt(key, iv, ct));
+    var v = JSON.parse(dec(plain));
+    if (!v || !Array.isArray(v.entries)) throw new Error('Vault contents are not readable.');
+    return v;
+  }
+  function deriveMaster(password) {
+    var salt = state.salt || (state.salt = C.randomBytes(16));
+    return C.pbkdf2Async('SHA256', enc(password), salt, 150000, 32).then(function (k) {
+      var hs = new Uint8Array(salt.length);
+      for (var i = 0; i < salt.length; i++) hs[i] = salt[i] ^ 0x5a;
+      return C.pbkdf2Async('SHA256', k, hs, 2, 32).then(function (h) {
+        return { key: k, hmacKey: h, salt: salt };
+      });
+    });
+  }
+
+  function persist() {
+    if (!state.key || !state.vault) return;
+    var blob = sealVault(state.vault, state.key, state.hmacKey);
+    state.raw = blob;
+    var saved = storeSet(STORE_KEY, blob);
+    var wasLost = !!state.storageLost;
+    state.storageLost = !saved;
+    // surface a write failure the moment it happens, not on the next unlock
+    if (state.storageLost && !wasLost && state.mode === 'unlocked' && els.storeWarn) {
+      syncStorageWarning();
+      msg(els.msgArea, 'This browser refused to save your vault. Your codes work until you close the page — export an encrypted backup now.', 'warn');
+    }
+  }
+
+  /* ---------------- rendering ---------------- */
+  var els = {};
+  function initEls() {
+    ['loading', 'setup', 'locked', 'unlocked', 'setupPw', 'setupPw2', 'setupGo', 'setupErr',
+      'unlockPw', 'unlockGo', 'unlockErr', 'lockBtn', 'list', 'filter', 'count', 'empty',
+      'addIssuer', 'addLabel', 'addSecret', 'addDigits', 'addPeriod', 'addAlgo', 'addGo', 'addErr',
+      'dbFile', 'dbPw', 'dbGo', 'dbErr', 'uriText', 'uriGo', 'uriErr',
+      'exportBtn', 'exportPlainBtn', 'importFile', 'restorePw', 'restoreGo', 'restoreErr',
+      'changePw', 'changePwOld', 'changeGo', 'changeErr',
+      'wipeBtn', 'storeWarn', 'msgArea', 'searchWrap'].forEach(function (id) { els[id] = $(id); });
+  }
+
+  function show(mode) {
+    state.mode = mode;
+    ['loading', 'setup', 'locked', 'unlocked'].forEach(function (m) {
+      els[m].classList.toggle('hidden', m !== mode);
+    });
+    els.lockBtn.classList.toggle('hidden', mode !== 'unlocked');
+  }
+
+  function msg(el, text, kind) {
+    if (!el) return;
+    if (!text) { el.className = 'hidden'; el.textContent = ''; return; }
+    el.className = 'msg ' + (kind || 'err');
+    el.textContent = text;
+  }
+
+  function normalizeSecret(s) {
+    return String(s || '').replace(/\s+/g, '').replace(/=+$/, '').toUpperCase();
+  }
+  function validSecret(s) {
+    try { C.base32Decode(s); return /^[A-Z2-7]+$/.test(s) && s.length >= 8; }
+    catch (e) { return false; }
+  }
+
+  function renderList() {
+    var needRefresh = false;
+    var list = els.list;
+    var entries = state.vault.entries;
+    var q = state.filter.trim().toLowerCase();
+    var shown = entries.filter(function (e) {
+      if (!q) return true;
+      return ((e.issuer || '') + ' ' + (e.label || '')).toLowerCase().indexOf(q) >= 0;
+    });
+
+    // full rebuild only when the visible set changed. HOTP counters live in the
+    // badge text, so they must be part of the signature or the badge goes stale.
+    var sig = shown.map(function (e) {
+      return e.id + (e.type === 'hotp' ? ':' + (e.counter || 0) : '');
+    }).join(',') + '|' + Object.keys(state.revealed).join(',');
+    if (list.dataset.sig !== sig) {
+      needRefresh = true;
+      list.dataset.sig = sig;
+      list.innerHTML = '';
+      shown.forEach(function (e) {
+        list.appendChild(entryNode(e));
+      });
+    }
+    els.count.textContent = entries.length + (entries.length === 1 ? ' account' : ' accounts');
+    els.empty.classList.toggle('hidden', entries.length > 0);
+    els.searchWrap.classList.toggle('hidden', entries.length < 2);
+    tick(needRefresh);
+  }
+
+  function entryNode(e) {
+    var d = document.createElement('div');
+    d.className = 'entry';
+    d.dataset.id = e.id;
+
+    var top = document.createElement('div');
+    top.className = 'top';
+    var who = document.createElement('div');
+    who.className = 'who';
+    var iss = document.createElement('div');
+    iss.className = 'issuer';
+    iss.textContent = e.issuer || '(no issuer)';
+    var lab = document.createElement('div');
+    lab.className = 'label';
+    lab.textContent = e.label || '';
+    who.appendChild(iss); who.appendChild(lab);
+    var code = document.createElement('div');
+    code.className = 'code';
+    code.dataset.role = 'code';
+    top.appendChild(who); top.appendChild(code);
+    d.appendChild(top);
+
+    var meta = document.createElement('div');
+    meta.className = 'meta';
+    var bar = document.createElement('div');
+    bar.className = 'bar';
+    var fill = document.createElement('i');
+    bar.appendChild(fill);
+    var secs = document.createElement('span');
+    secs.className = 'secs';
+    secs.dataset.role = 'secs';
+    var badge = document.createElement('span');
+    badge.className = 'badge' + (e.type === 'hotp' ? ' hotp' : '');
+    badge.textContent = e.type === 'hotp'
+      ? ('HOTP c' + (e.counter || 0))
+      : (((e.algo || 'SHA1').replace('SHA', 'S')) + ' · ' + (e.digits || 6) + 'd · ' + (e.period || 30) + 's');
+    meta.appendChild(bar); meta.appendChild(secs); meta.appendChild(badge);
+    d.appendChild(meta);
+
+    if (state.revealed[e.id]) {
+      var box = document.createElement('div');
+      box.className = 'secretbox';
+      box.dataset.role = 'secret';
+      box.textContent = e.secret;
+      box.addEventListener('click', function () { copy(e.secret, 'Secret copied'); });
+      d.appendChild(box);
+    }
+
+    var actions = document.createElement('div');
+    actions.className = 'actions';
+    actions.appendChild(mkBtn('Copy code', 'small', function () { copy(code.textContent, 'Code copied'); }));
+    actions.appendChild(mkBtn('Show key', 'small', function () { toggleSecret(d, e); }));
+    if (e.type === 'hotp') {
+      actions.appendChild(mkBtn('Next code', 'small', function () {
+        e.counter = (e.counter || 0) + 1; persist(); renderList();
+      }));
+    }
+    actions.appendChild(mkBtn('Delete', 'small danger', function () {
+      if (!confirm('Delete ' + (e.issuer || e.label || 'this account') + '? Make sure you have another way in.')) return;
+      state.vault.entries = state.vault.entries.filter(function (x) { return x.id !== e.id; });
+      persist(); renderList();
+    }));
+    d.appendChild(actions);
+    return d;
+  }
+
+  function mkBtn(text, cls, fn) {
+    var b = document.createElement('button');
+    b.className = cls || '';
+    b.textContent = text;
+    b.addEventListener('click', fn);
+    return b;
+  }
+
+  function toggleSecret(node, e) {
+    if (state.revealed[e.id]) delete state.revealed[e.id];
+    else state.revealed[e.id] = 1;
+    renderList();
+  }
+
+  function tick(rebuilt) {
+    if (state.mode !== 'unlocked' || !state.vault) return;
+    var now = Math.floor(Date.now() / 1000);
+    var nodes = els.list.children;
+    for (var i = 0; i < nodes.length; i++) {
+      var node = nodes[i];
+      var id = node.dataset.id;
+      var e = null;
+      for (var j = 0; j < state.vault.entries.length; j++) if (state.vault.entries[j].id === id) e = state.vault.entries[j];
+      if (!e) continue;
+      var codeEl = node.querySelector('[data-role=code]');
+      var secEl = node.querySelector('[data-role=secs]');
+      var bar = node.querySelector('.bar');
+      var fill = bar ? bar.firstChild : null;
+      if (e.type === 'hotp') {
+        codeEl.textContent = C.hotp(C.base32Decode(e.secret), e.counter || 0, e.digits || 6, e.algo || 'SHA1');
+        if (secEl) secEl.textContent = '';
+        if (fill) fill.style.width = '100%';
+        bar.className = 'bar';
+        continue;
+      }
+      var period = e.period || 30;
+      var left = period - (now % period);
+      var nextCode = C.totp(C.base32Decode(e.secret), e.digits || 6, period, e.algo || 'SHA1', now);
+      if (codeEl.textContent !== nextCode) codeEl.textContent = nextCode;
+      if (secEl) secEl.textContent = left;
+      if (fill) fill.style.width = (left / period * 100).toFixed(2) + '%';
+      bar.className = 'bar' + (left <= 5 ? ' crit' : (left <= 10 ? ' low' : ''));
+    }
+    if (rebuilt) { /* nothing extra */ }
+  }
+
+  function copy(text, label) {
+    text = String(text || '').replace(/\s+/g, '');
+    var done = function () { flash(label || 'Copied'); };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(done, fallback);
+    } else fallback();
+    function fallback() {
+      var ta = document.createElement('textarea');
+      ta.value = text;
+      ta.setAttribute('readonly', '');
+      ta.style.cssText = 'position:fixed;top:0;left:0;opacity:0;';
+      document.body.appendChild(ta);
+      ta.select(); ta.setSelectionRange(0, text.length);
+      try { document.execCommand('copy'); done(); } catch (e) { flash('Copy failed - select manually'); }
+      document.body.removeChild(ta);
+    }
+  }
+  var flashTimer = null;
+  function flash(text) {
+    var el = $('toast');
+    el.textContent = text;
+    el.classList.remove('hidden');
+    clearTimeout(flashTimer);
+    flashTimer = setTimeout(function () { el.classList.add('hidden'); }, 1400);
+  }
+
+  /* ---------------- setup / unlock ---------------- */
+  function doSetup() {
+    var pw = els.setupPw.value, pw2 = els.setupPw2.value;
+    if (pw.length < 6) return msg(els.setupErr, 'Use at least 6 characters. This password encrypts your codes.');
+    if (pw !== pw2) return msg(els.setupErr, 'The two passwords do not match.');
+    busy(els.setupGo, true);
+    try { state.salt = C.randomBytes(16); }
+    catch (e) { busy(els.setupGo, false); return msg(els.setupErr, String(e.message || e)); }
+    deriveMaster(pw).then(function (k) {
+      state.key = k.key; state.hmacKey = k.hmacKey;
+      state.vault = emptyVault();
+      persist();
+      els.setupPw.value = ''; els.setupPw2.value = '';
+      msg(els.setupErr, '');
+      afterUnlock(true);
+    }).catch(function (e) { msg(els.setupErr, String(e.message || e)); }).then(function () { busy(els.setupGo, false); });
+  }
+
+  function doUnlock() {
+    var pw = els.unlockPw.value;
+    var blob = storeGet(STORE_KEY);
+    if (!blob) return msg(els.unlockErr, 'No saved vault found on this device. Import a backup file instead.');
+    busy(els.unlockGo, true);
+    var salt;
+    try {
+      var parts = blob.split('.');
+      if (parts.length !== 5 || parts[0] !== 'OTPV1') throw new Error('Stored vault is unreadable.');
+      salt = unb64(parts[1]);
+    } catch (e) { busy(els.unlockGo, false); return msg(els.unlockErr, String(e.message || e)); }
+    state.salt = salt;
+    deriveMaster(pw).then(function (k) {
+      var v = openVault(blob, k.key, k.hmacKey);
+      state.key = k.key; state.hmacKey = k.hmacKey; state.vault = v; state.raw = blob;
+      els.unlockPw.value = '';
+      msg(els.unlockErr, '');
+      afterUnlock(false);
+    }).catch(function (e) {
+      msg(els.unlockErr, 'Wrong password.');
+    }).then(function () { busy(els.unlockGo, false); });
+  }
+
+  function syncStorageWarning() {
+    // storageOK is the boot-time probe; storageLost means a write actually failed
+    // later (Safari private mode: the probe passes, then setItem throws).
+    var bad = !storageOK || !!state.storageLost;
+    if (els.storeWarn) els.storeWarn.classList.toggle('hidden', !bad);
+    return bad;
+  }
+
+  function afterUnlock(fresh) {
+    var bad = syncStorageWarning();
+    show('unlocked');
+    renderList();
+    if (bad) {
+      msg(els.msgArea, 'This browser blocked local storage, so your codes will vanish when the page closes. Export an encrypted backup before you leave.', 'warn');
+    } else {
+      msg(els.msgArea, '', '');
+    }
+  }
+
+  function lock() {
+    state.key = null; state.hmacKey = null; state.vault = null; state.revealed = {};
+    els.list.innerHTML = ''; els.list.dataset.sig = '';
+    els.filter.value = ''; state.filter = '';
+    msg(els.msgArea, '');
+    show('locked');
+  }
+
+  function busy(btn, on) {
+    if (!btn) return;
+    btn.disabled = on;
+    btn.textContent = on ? 'Working…' : btn.dataset.label || btn.textContent;
+    if (!on && btn.dataset.label) btn.textContent = btn.dataset.label;
+  }
+
+  /* ---------------- add / import ---------------- */
+  function doAdd() {
+    var secret = normalizeSecret(els.addSecret.value);
+    if (!secret) return msg(els.addErr, 'Secret key is required.');
+    if (!validSecret(secret)) return msg(els.addErr, 'That does not look like a base32 secret (letters A-Z and digits 2-7, e.g. JBSWY3DPEHPK3PXP).');
+    var e = {
+      id: newId(),
+      issuer: els.addIssuer.value.trim(),
+      label: els.addLabel.value.trim(),
+      secret: secret,
+      digits: parseInt(els.addDigits.value, 10) || 6,
+      period: parseInt(els.addPeriod.value, 10) || 30,
+      algo: els.addAlgo.value,
+      type: 'totp', counter: 0
+    };
+    state.vault.entries.push(e);
+    persist();
+    els.addIssuer.value = ''; els.addLabel.value = ''; els.addSecret.value = '';
+    msg(els.addErr, '');
+    renderList();
+    flash('Account added');
+  }
+
+  function safeDecode(s) {
+    try { return decodeURIComponent(s); } catch (e) { return null; }
+  }
+
+  function parseOtpauth(line) {
+    // Malformed input (e.g. a stray '%') must never throw: the caller imports
+    // line by line and an exception would abort the whole batch mid-way.
+    try {
+      var m = /^otpauth:\/\/(totp|hotp)\/([^?]*)\?(.*)$/i.exec(line.trim());
+      if (!m) return null;
+      var type = m[1].toLowerCase();
+      var label = safeDecode(m[2]);
+      var params = {};
+      var bad = false;
+      m[3].split('&').forEach(function (kv) {
+        var i = kv.indexOf('=');
+        if (i < 0) return;
+        var v = safeDecode(kv.slice(i + 1).replace(/\+/g, ' '));
+        if (v === null) { bad = true; return; }
+        params[kv.slice(0, i).toLowerCase()] = v;
+      });
+      if (bad || label === null) return null;
+      var secret = normalizeSecret(params.secret || '');
+      if (!secret || !validSecret(secret)) return null;
+      var issuer = params.issuer || '';
+      var name = label.replace(/^.*:/, '');
+      return {
+        id: newId(), issuer: issuer, label: name || label, secret: secret,
+        digits: parseInt(params.digits, 10) || 6,
+        period: parseInt(params.period, 10) || 30,
+        algo: (params.algorithm || 'SHA1').toUpperCase().replace('SHA-', 'SHA'),
+        type: type, counter: parseInt(params.counter, 10) || 0
+      };
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function doUriImport() {
+    var lines = els.uriText.value.split(/[\r\n]+/);
+    var added = 0, skipped = 0;
+    lines.forEach(function (line) {
+      line = line.trim();
+      if (!line) return;
+      var e = parseOtpauth(line);
+      if (!e) {
+        // maybe it's just a bare secret
+        var s = normalizeSecret(line);
+        if (validSecret(s)) {
+          e = { id: newId(), issuer: '', label: '', secret: s, digits: 6, period: 30, algo: 'SHA1', type: 'totp', counter: 0 };
+        }
+      }
+      if (!e) { skipped++; return; }
+      var dup = state.vault.entries.some(function (x) { return x.secret === e.secret; });
+      if (dup) { skipped++; return; }
+      state.vault.entries.push(e); added++;
+    });
+    if (!added) return msg(els.uriErr, 'No valid entries found. Paste otpauth:// URIs (one per line) or bare base32 secrets.');
+    persist(); renderList();
+    els.uriText.value = '';
+    msg(els.uriErr, '');
+    flash(added + ' imported' + (skipped ? ', ' + skipped + ' skipped' : ''));
+  }
+
+  function doDbImport() {
+    var f = els.dbFile.files && els.dbFile.files[0];
+    if (!f) return msg(els.dbErr, 'Choose the authplus.db file first.');
+    var pw = els.dbPw.value;
+    if (!pw) return msg(els.dbErr, 'Enter the Authenticator Plus master password.');
+    msg(els.dbErr, '');
+    busy(els.dbGo, true);
+    var reader = new FileReader();
+    reader.onerror = function () { busy(els.dbGo, false); msg(els.dbErr, 'Could not read that file.'); };
+    reader.onload = function () {
+      var file = new Uint8Array(reader.result);
+      S.decryptSqlcipherAsync(file, enc(pw), function (p) {
+        msg(els.dbErr, 'Trying ' + p + '…', 'warn');
+      }).then(function (r) {
+        var parsed = S.parseDb(r.db);
+        var out = S.extractAccounts(parsed);
+        if (!out.entries.length) {
+          busy(els.dbGo, false);
+          if (r.partial) {
+            return msg(els.dbErr, 'The database is damaged: page ' + r.failedPage +
+              ' failed its integrity check before any accounts could be read. Try restoring the backup from the old app again.', 'err');
+          }
+          return msg(els.dbErr, 'Database opened, but no accounts were found. Tables: ' +
+            parsed.tables.map(function (t) { return t.name; }).join(', '));
+        }
+        var added = 0, skipped = 0;
+        out.entries.forEach(function (e) {
+          if (!validSecret(e.secret)) { skipped++; return; }
+          if (state.vault.entries.some(function (x) { return x.secret === e.secret; })) { skipped++; return; }
+          e.id = newId();
+          state.vault.entries.push(e);
+          added++;
+        });
+        persist(); renderList();
+        els.dbPw.value = ''; els.dbFile.value = '';
+        busy(els.dbGo, false);
+        msg(els.dbErr, '');
+        if (r.partial) {
+          // Some page failed its HMAC check and the database was truncated there,
+          // so accounts stored after that point are missing.
+          msg(els.dbErr, 'Only part of the database could be decrypted: page ' + r.failedPage +
+            ' failed its integrity check, so ' + added + ' account' + (added === 1 ? '' : 's') +
+            ' were recovered and any stored after that point are missing. The file may be truncated or damaged — check the old app before deleting it.', 'warn');
+        } else {
+          flash(added + ' accounts imported' + (skipped ? ', ' + skipped + ' skipped' : ''));
+        }
+      }).catch(function (e) {
+        busy(els.dbGo, false);
+        msg(els.dbErr, String(e.message || e) + ' The password is the one you set inside Authenticator Plus.');
+      });
+    };
+    reader.readAsArrayBuffer(f);
+  }
+
+  /* ---------------- export / import vault ---------------- */
+  function download(filename, text) {
+    try {
+      var blob = new Blob([text], { type: 'application/json' });
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = url; a.download = filename;
+      document.body.appendChild(a); a.click();
+      setTimeout(function () { document.body.removeChild(a); URL.revokeObjectURL(url); }, 1000);
+      return true;
+    } catch (e) { return false; }
+  }
+
+  function doExport() {
+    persist();
+    var d = new Date();
+    var stamp = d.getFullYear() + ('0' + (d.getMonth() + 1)).slice(-2) + ('0' + d.getDate()).slice(-2);
+    var okd = download('authenticator-vault-' + stamp + '.otpv1.json', state.raw);
+    if (!okd) prompt('Copy this encrypted backup to a safe place:', state.raw);
+    else flash('Encrypted backup saved');
+  }
+  function doExportPlain() {
+    var n = (state.vault && state.vault.entries.length) || 0;
+    if (!confirm('This writes all ' + n + ' secret key' + (n === 1 ? '' : 's') +
+      ' to a file in PLAINTEXT, with no password protection.\n\nAnyone who gets that file can generate your codes. Continue?')) return;
+    var d = new Date();
+    var stamp = d.getFullYear() + ('0' + (d.getMonth() + 1)).slice(-2) + ('0' + d.getDate()).slice(-2);
+    var text = JSON.stringify(state.vault, null, 2);
+    var okd = download('authenticator-PLAINTEXT-' + stamp + '.json', text);
+    if (!okd) prompt('Plaintext export (keep it safe!):', text);
+    else flash('Plaintext export saved - keep it safe');
+  }
+
+  function confirmReplace() {
+    var n = (state.vault && state.vault.entries.length) || 0;
+    if (!n) return true;
+    return confirm('Restoring replaces all ' + n + ' account' + (n === 1 ? '' : 's') +
+      ' currently in this vault. They will not be merged.\n\nExport an encrypted backup first if you want to keep them.');
+  }
+
+  function doImportVault() {
+    var f = els.importFile.files && els.importFile.files[0];
+    if (!f) return msg(els.restoreErr, 'Choose a backup file first.');
+    var pw = els.restorePw ? els.restorePw.value : '';
+    msg(els.restoreErr, '');
+    busy(els.restoreGo, true);
+    var reader = new FileReader();
+    reader.onerror = function () { busy(els.restoreGo, false); msg(els.restoreErr, 'Could not read that file.'); };
+    reader.onload = function () {
+      var text = dec(new Uint8Array(reader.result));
+      var blob = text.trim();
+      var finish = function () { busy(els.restoreGo, false); els.importFile.value = ''; els.restorePw.value = ''; };
+      if (blob.charAt(0) === '{') {
+        // plaintext vault: re-sealed under the current master password
+        try {
+          var v = JSON.parse(blob);
+          if (!v || !Array.isArray(v.entries)) throw new Error('bad');
+          v.entries.forEach(function (e, i) { if (!e.id) e.id = newId() + i; });
+          if (!confirmReplace()) { finish(); return; }
+          state.vault = v; persist(); renderList();
+          flash('Plain vault imported');
+        } catch (e) { msg(els.restoreErr, 'That JSON file is not a vault export.'); }
+        finish();
+        return;
+      }
+      if (blob.indexOf('OTPV1.') !== 0) {
+        msg(els.restoreErr, 'That file is not a vault backup (expected OTPV1… or a plain JSON export).');
+        finish();
+        return;
+      }
+      if (!pw) { msg(els.restoreErr, 'Enter the password that sealed this backup.'); finish(); return; }
+      var salt;
+      try { salt = unb64(blob.split('.')[1]); }
+      catch (e) { msg(els.restoreErr, 'Backup file is malformed.'); finish(); return; }
+      var prevSalt = state.salt;
+      state.salt = salt;
+      deriveMaster(pw).then(function (k) {
+        var v = openVault(blob, k.key, k.hmacKey);
+        if (!confirmReplace()) { state.salt = prevSalt; finish(); return; }
+        state.key = k.key; state.hmacKey = k.hmacKey; state.vault = v;
+        persist(); renderList();
+        flash('Backup restored');
+        finish();
+      }).catch(function () {
+        state.salt = prevSalt;
+        msg(els.restoreErr, 'Could not open that backup — wrong password or damaged file.');
+        finish();
+      });
+    };
+    reader.readAsArrayBuffer(f);
+  }
+
+  function doChangePw() {
+    var oldPw = els.changePwOld ? els.changePwOld.value : '';
+    var pw = els.changePw.value;
+    if (!state.vault) return msg(els.changeErr, 'Unlock the vault first.');
+    if (!oldPw) return msg(els.changeErr, 'Enter your current password.');
+    if (pw.length < 6) return msg(els.changeErr, 'New password must be at least 6 characters.');
+
+    var prevSalt = state.salt;
+    var stored;
+    try { stored = storeGet(STORE_KEY); } catch (e) { stored = null; }
+    if (!stored) return msg(els.changeErr, 'Could not read the stored vault.');
+
+    busy(els.changeGo, true);
+    var step = Promise.resolve();
+    // 1. verify the old password against the blob that is actually on disk
+    step = step.then(function () {
+      state.salt = unb64(stored.split('.')[1]);
+      return deriveMaster(oldPw).then(function (k) {
+        openVault(stored, k.key, k.hmacKey); // throws on wrong password
+      });
+    });
+    // 2. only then re-seal with a fresh salt under the new password
+    step = step.then(function () {
+      state.salt = C.randomBytes(16);
+      return deriveMaster(pw);
+    }).then(function (nk) {
+      state.key = nk.key; state.hmacKey = nk.hmacKey;
+      persist();
+      if (state.storageLost) throw new Error('storage');
+      els.changePw.value = '';
+      if (els.changePwOld) els.changePwOld.value = '';
+      busy(els.changeGo, false);
+      msg(els.changeErr, 'Password changed. Old backups still use the old password.', 'ok');
+    }).catch(function (e) {
+      state.salt = prevSalt;
+      busy(els.changeGo, false);
+      if (e && e.message === 'storage') {
+        msg(els.changeErr, 'Password changed in this session, but this browser refused to save the vault. Export a backup now.', 'warn');
+      } else {
+        msg(els.changeErr, 'Current password is wrong.');
+      }
+    });
+  }
+
+  /* ---------------- boot ---------------- */
+  function boot() {
+    initEls();
+    ['setupGo', 'unlockGo', 'addGo', 'dbGo', 'uriGo', 'exportBtn', 'exportPlainBtn',
+      'restoreGo', 'changeGo', 'lockBtn'].forEach(function (id) {
+        if (els[id]) els[id].dataset.label = els[id].textContent;
+      });
+
+    els.setupGo.addEventListener('click', doSetup);
+    els.setupPw2.addEventListener('keydown', function (e) { if (e.key === 'Enter') doSetup(); });
+    els.unlockGo.addEventListener('click', doUnlock);
+    els.unlockPw.addEventListener('keydown', function (e) { if (e.key === 'Enter') doUnlock(); });
+    els.lockBtn.addEventListener('click', lock);
+    els.addGo.addEventListener('click', doAdd);
+    els.dbGo.addEventListener('click', doDbImport);
+    els.uriGo.addEventListener('click', doUriImport);
+    els.exportBtn.addEventListener('click', doExport);
+    els.exportPlainBtn.addEventListener('click', doExportPlain);
+    els.restoreGo.addEventListener('click', doImportVault);
+    els.changeGo.addEventListener('click', doChangePw);
+    els.filter.addEventListener('input', function () { state.filter = els.filter.value; renderList(); });
+    els.wipeBtn.addEventListener('click', function () {
+      if (!confirm('Delete the vault stored on this device? Export a backup first if you need it.')) return;
+      storeDel(STORE_KEY); lock(); show('setup');
+    });
+
+    var blob = storeGet(STORE_KEY);
+    show(blob ? 'locked' : 'setup');
+    setInterval(function () { tick(false); }, 1000);
+    document.addEventListener('visibilitychange', function () { if (!document.hidden) tick(true); });
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
+  else boot();
+})();
+
+</script>
+</body>
+</html>

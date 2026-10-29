@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Authenticator">
+<meta name="color-scheme" content="dark light">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; font-src data:; connect-src 'none'; form-action 'none'; base-uri 'none'">
+<!-- frame-ancestors / X-Frame-Options are deliberately absent: browsers ignore
+     frame-ancestors when it arrives via <meta>, and a file:// page cannot send
+     response headers. Do not add it here — it only produces a console error. -->
+<meta name="referrer" content="no-referrer">
+<title>Offline Authenticator</title>
+<style>
+/*__CSS__*/
+</style>
+</head>
+<body>
+
+<header class="app">
+  <div class="inner">
+    <h1>Offline Authenticator<span class="sub">2FA codes · no network · nothing leaves your device</span></h1>
+    <button id="lockBtn" class="small hidden">Lock</button>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <div id="loading" class="card center muted">Loading…</div>
+
+  <!-- ---------- SETUP ---------- -->
+  <div id="setup" class="hidden">
+    <div class="card">
+      <h3>Create your vault</h3>
+      <p class="muted tiny">Pick a password. It encrypts your codes on this device. There is no “forgot password”
+      — if you lose it, you lose the vault and will need each site's recovery codes.</p>
+      <div class="field"><label for="setupPw">Password (min 6 characters)</label>
+        <input id="setupPw" type="password" autocomplete="new-password" autocapitalize="off" spellcheck="false"></div>
+      <div class="field"><label for="setupPw2">Repeat password</label>
+        <input id="setupPw2" type="password" autocomplete="new-password" autocapitalize="off" spellcheck="false"></div>
+      <div id="setupErr" class="hidden"></div>
+      <button id="setupGo" class="primary">Create vault</button>
+    </div>
+    <div class="card tight muted tiny">
+      Already have a backup file? Create a vault first, then use <b>Restore backup</b> below.
+    </div>
+  </div>
+
+  <!-- ---------- LOCKED ---------- -->
+  <div id="locked" class="hidden">
+    <div class="card">
+      <h3>Unlock</h3>
+      <div class="field"><label for="unlockPw">Password</label>
+        <input id="unlockPw" type="password" autocomplete="current-password" autocapitalize="off" spellcheck="false"></div>
+      <div id="unlockErr" class="hidden"></div>
+      <button id="unlockGo" class="primary">Unlock</button>
+      <div class="btnrow">
+        <button id="wipeBtn" class="small danger">Delete stored vault</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ---------- UNLOCKED ---------- -->
+  <div id="unlocked" class="hidden">
+    <div id="msgArea" class="hidden"></div>
+    <div id="storeWarn" class="card tight tiny hidden">
+      This browser blocked local storage. Your vault will not survive closing the page — export a backup before you leave.
+    </div>
+
+    <div id="searchWrap" class="card tight">
+      <input id="filter" type="text" placeholder="Search accounts…" autocapitalize="off" spellcheck="false"
+             style="border:none;background:transparent;padding:0;">
+    </div>
+
+    <div style="display:flex;align-items:baseline;gap:10px;">
+      <h2 style="flex:1;">Your codes</h2>
+      <span id="count" class="muted tiny"></span>
+    </div>
+    <div id="list"></div>
+    <div id="empty" class="card empty">
+      <div class="big">🔐</div>
+      No accounts yet.<br>Import your Authenticator Plus backup below, or add one by hand.
+    </div>
+
+    <details open>
+      <summary>Import from Authenticator Plus (authplus.db)</summary>
+      <div class="card">
+        <p class="muted tiny">
+          In Authenticator Plus: <b>Settings → Backup &amp; Restore → Backup to SD Card</b>, then copy
+          <code class="mono">authplus.db</code> off the phone (on iPhone: Finder → your iPhone → Files →
+          Authenticator Plus → drag out the Backup folder).
+        </p>
+        <div class="field"><label for="dbFile">Database file</label>
+          <input id="dbFile" type="file" accept=".db,.sqlite,.sqlite3,*/*"></div>
+        <div class="field"><label for="dbPw">Authenticator Plus master password</label>
+          <input id="dbPw" type="password" autocomplete="off" autocapitalize="off" spellcheck="false"></div>
+        <div id="dbErr" class="hidden"></div>
+        <button id="dbGo" class="primary">Decrypt &amp; import</button>
+        <p class="muted tiny" style="margin-bottom:0;">The file is decrypted in this page only. Nothing is uploaded.</p>
+      </div>
+    </details>
+
+    <details>
+      <summary>Add an account manually</summary>
+      <div class="card">
+        <div class="row">
+          <div class="field"><label for="addIssuer">Issuer / service</label>
+            <input id="addIssuer" type="text" placeholder="Google" autocapitalize="off"></div>
+          <div class="field"><label for="addLabel">Account name</label>
+            <input id="addLabel" type="text" placeholder="you@gmail.com" autocapitalize="off" spellcheck="false"></div>
+        </div>
+        <div class="field"><label for="addSecret">Secret key (base32)</label>
+          <input id="addSecret" type="text" placeholder="JBSWY3DPEHPK3PXP" autocapitalize="characters" spellcheck="false"
+                 autocorrect="off"></div>
+        <div class="row">
+          <div class="field"><label for="addDigits">Digits</label>
+            <input id="addDigits" type="number" value="6" min="5" max="8" inputmode="numeric"></div>
+          <div class="field"><label for="addPeriod">Period (sec)</label>
+            <input id="addPeriod" type="number" value="30" min="10" max="120" inputmode="numeric"></div>
+          <div class="field"><label for="addAlgo">Algorithm</label>
+            <select id="addAlgo">
+              <option value="SHA1" selected>SHA1</option>
+              <option value="SHA256">SHA256</option>
+              <option value="SHA512">SHA512</option>
+            </select></div>
+        </div>
+        <div id="addErr" class="hidden"></div>
+        <button id="addGo" class="primary">Add account</button>
+      </div>
+    </details>
+
+    <details>
+      <summary>Paste otpauth:// links or bare secrets</summary>
+      <div class="card">
+        <p class="muted tiny">One per line. Accepts <code class="mono">otpauth://totp/…?secret=…&amp;issuer=…</code>
+        or just the base32 key.</p>
+        <div class="field"><textarea id="uriText" placeholder="otpauth://totp/GitHub:me?secret=JBSWY3DPEHPK3PXP&issuer=GitHub"></textarea></div>
+        <div id="uriErr" class="hidden"></div>
+        <button id="uriGo" class="primary">Import</button>
+      </div>
+    </details>
+
+    <details>
+      <summary>Backup, restore &amp; settings</summary>
+      <div class="card">
+        <h3>Backup</h3>
+        <div class="btnrow">
+          <button id="exportBtn" class="primary small">Export encrypted backup</button>
+          <button id="exportPlainBtn" class="small danger">Export plaintext JSON</button>
+        </div>
+        <p class="muted tiny">The encrypted backup needs your current password to restore. The plaintext export
+        does not — keep it somewhere safe and delete it when you are done.</p>
+        <div class="hr"></div>
+        <h3>Restore</h3>
+        <div class="field"><label for="importFile">Vault file (.json)</label>
+          <input id="importFile" type="file" accept=".json,*/*"></div>
+        <div class="field"><label for="restorePw">Password for that backup (leave empty for a plaintext export)</label>
+          <input id="restorePw" type="password" autocomplete="off" autocapitalize="off" spellcheck="false"></div>
+        <div id="restoreErr" class="hidden"></div>
+        <div class="btnrow"><button id="restoreGo" class="small primary">Restore</button></div>
+        <div class="hr"></div>
+        <h3>Change password</h3>
+        <div class="field"><label for="changePwOld">Current password</label>
+          <input id="changePwOld" type="password" autocomplete="current-password" autocapitalize="off" spellcheck="false"></div>
+        <div class="field"><label for="changePw">New password</label>
+          <input id="changePw" type="password" autocomplete="new-password" autocapitalize="off" spellcheck="false"></div>
+        <div id="changeErr" class="hidden"></div>
+        <button id="changeGo" class="small">Change password</button>
+      </div>
+    </details>
+
+    <div class="card tight muted tiny">
+      <b>How this stays safe:</b> everything runs in this one file. No fonts, no scripts, no images from the
+      internet — the page cannot contact any server even if you are online. Your codes are encrypted with
+      AES-256 using a key derived from your password, and the password itself is never stored.
+    </div>
+  </div>
+</div>
+
+<div id="toast" class="hidden" style="position:fixed;left:50%;transform:translateX(-50%);bottom:24px;
+  background:#2b3240;color:#fff;padding:9px 16px;border-radius:20px;font-size:13px;z-index:50;
+  box-shadow:0 6px 20px rgba(0,0,0,.35);"></div>
+
+<script>
+/*__CRYPTO__*/
+</script>
+<script>
+/*__SQLITE__*/
+</script>
+<script>
+/*__APP__*/
+</script>
+</body>
+</html>
