@@ -1303,7 +1303,9 @@ code.mono { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12
     if (!C.bytesEqual(mac, calc)) throw new Error('Wrong password, or the vault file is corrupted.');
     var plain = unpad16(C.cbcDecrypt(key, iv, ct));
     var v = JSON.parse(dec(plain));
-    if (!v || !Array.isArray(v.entries)) throw new Error('Vault contents are not readable.');
+    if (!v || !Array.isArray(v.entries) || !v.entries.every(validEntry)) {
+      throw new Error('Vault contents are not readable.');
+    }
     return v;
   }
   function deriveMaster(password) {
@@ -1364,6 +1366,16 @@ code.mono { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12
   function validSecret(s) {
     try { C.base32Decode(s); return /^[A-Z2-7]+$/.test(s) && s.length >= 8; }
     catch (e) { return false; }
+  }
+  function validOtpParams(e) {
+    return !!e && (e.type === 'totp' || e.type === 'hotp') &&
+      Number.isInteger(e.digits) && e.digits >= 5 && e.digits <= 8 &&
+      Number.isInteger(e.period) && e.period >= 10 && e.period <= 120 &&
+      /^(SHA1|SHA256|SHA512)$/.test(e.algo) &&
+      Number.isSafeInteger(e.counter) && e.counter >= 0;
+  }
+  function validEntry(e) {
+    return !!e && validSecret(e.secret) && validOtpParams(e);
   }
 
   function renderList() {
@@ -1623,6 +1635,7 @@ code.mono { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12
       algo: els.addAlgo.value,
       type: 'totp', counter: 0
     };
+    if (!validOtpParams(e)) return msg(els.addErr, 'Use 5–8 digits and a period between 10 and 120 seconds.');
     state.vault.entries.push(e);
     persist();
     els.addIssuer.value = ''; els.addLabel.value = ''; els.addSecret.value = '';
@@ -1657,13 +1670,14 @@ code.mono { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12
       if (!secret || !validSecret(secret)) return null;
       var issuer = params.issuer || '';
       var name = label.replace(/^.*:/, '');
-      return {
+      var e = {
         id: newId(), issuer: issuer, label: name || label, secret: secret,
         digits: parseInt(params.digits, 10) || 6,
         period: parseInt(params.period, 10) || 30,
         algo: (params.algorithm || 'SHA1').toUpperCase().replace('SHA-', 'SHA'),
         type: type, counter: parseInt(params.counter, 10) || 0
       };
+      return validOtpParams(e) ? e : null;
     } catch (e) {
       return null;
     }
@@ -1722,7 +1736,7 @@ code.mono { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12
         }
         var added = 0, skipped = 0;
         out.entries.forEach(function (e) {
-          if (!validSecret(e.secret)) { skipped++; return; }
+          if (!validEntry(e)) { skipped++; return; }
           if (state.vault.entries.some(function (x) { return x.secret === e.secret; })) { skipped++; return; }
           e.id = newId();
           state.vault.entries.push(e);
@@ -1805,7 +1819,7 @@ code.mono { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12
         // plaintext vault: re-sealed under the current master password
         try {
           var v = JSON.parse(blob);
-          if (!v || !Array.isArray(v.entries)) throw new Error('bad');
+          if (!v || !Array.isArray(v.entries) || !v.entries.every(validEntry)) throw new Error('bad');
           v.entries.forEach(function (e, i) { if (!e.id) e.id = newId() + i; });
           if (!confirmReplace()) { finish(); return; }
           state.vault = v; persist(); renderList();
@@ -1849,6 +1863,7 @@ code.mono { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12
     if (pw.length < 6) return msg(els.changeErr, 'New password must be at least 6 characters.');
 
     var prevSalt = state.salt;
+    var newCredentials = false;
     var stored;
     try { stored = storeGet(STORE_KEY); } catch (e) { stored = null; }
     if (!stored) return msg(els.changeErr, 'Could not read the stored vault.');
@@ -1868,6 +1883,7 @@ code.mono { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12
       return deriveMaster(pw);
     }).then(function (nk) {
       state.key = nk.key; state.hmacKey = nk.hmacKey;
+      newCredentials = true;
       persist();
       if (state.storageLost) throw new Error('storage');
       els.changePw.value = '';
@@ -1875,7 +1891,9 @@ code.mono { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12
       busy(els.changeGo, false);
       msg(els.changeErr, 'Password changed. Old backups still use the old password.', 'ok');
     }).catch(function (e) {
-      state.salt = prevSalt;
+      // Once the new key is active, its salt must stay with it even if the
+      // storage write fails; later exports still need to be decryptable.
+      if (!newCredentials) state.salt = prevSalt;
       busy(els.changeGo, false);
       if (e && e.message === 'storage') {
         msg(els.changeErr, 'Password changed in this session, but this browser refused to save the vault. Export a backup now.', 'warn');

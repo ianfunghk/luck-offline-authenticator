@@ -279,6 +279,75 @@ async function openDetails(page, text) {
   eq('zero external requests', netHits, 0);
   eq('zero page errors', errors.length, 0, JSON.stringify(errors));
 
+  console.log('--- password change survives a storage write failure ---');
+  const storagePage = await browser.newPage();
+  await storagePage.goto(FILE);
+  await storagePage.fill('#setupPw', 'old-password');
+  await storagePage.fill('#setupPw2', 'old-password');
+  await storagePage.click('#setupGo');
+  await storagePage.waitForSelector('#unlocked:not(.hidden)', { timeout: 20000 });
+  await storagePage.evaluate(() => {
+    Storage.prototype.setItem = function () { throw new DOMException('full', 'QuotaExceededError'); };
+  });
+  await openDetails(storagePage, 'Backup, restore');
+  await storagePage.fill('#changePwOld', 'old-password');
+  await storagePage.fill('#changePw', 'new-password');
+  await storagePage.click('#changeGo');
+  await storagePage.waitForFunction(() => {
+    return /Password changed in this session/.test(document.getElementById('changeErr').textContent);
+  }, null, { timeout: 20000 });
+  // A later persist must keep the new salt paired with the new key.
+  await openDetails(storagePage, 'Add an account manually');
+  await storagePage.fill('#addSecret', 'JBSWY3DPEHPK3PXP');
+  await storagePage.click('#addGo');
+  const storageDownload = await Promise.all([
+    storagePage.waitForEvent('download', { timeout: 15000 }),
+    storagePage.click('#exportBtn')
+  ]);
+  const storagePath = path.join('/tmp', 'vault-storage-failure-' + Date.now() + '.json');
+  await storageDownload[0].saveAs(storagePath);
+  const storageParts = fs.readFileSync(storagePath, 'utf8').split('.');
+  function storageVaultAccepts(password) {
+    const salt = Buffer.from(storageParts[1], 'base64');
+    const key = nodeCrypto.pbkdf2Sync(password, salt, 150000, 32, 'sha256');
+    const hmacSalt = Buffer.from(salt.map(b => b ^ 0x5a));
+    const hmacKey = nodeCrypto.pbkdf2Sync(key, hmacSalt, 2, 32, 'sha256');
+    const mac = nodeCrypto.createHmac('sha256', hmacKey)
+      .update(Buffer.concat([Buffer.from(storageParts[2], 'base64'), Buffer.from(storageParts[3], 'base64')]))
+      .digest();
+    return mac.equals(Buffer.from(storageParts[4], 'base64'));
+  }
+  ok('export after later persist accepts the new password', storageVaultAccepts('new-password'));
+  ok('export after later persist rejects the old password', !storageVaultAccepts('old-password'));
+  await storagePage.close();
+
+  console.log('--- invalid OTP parameters are rejected before persistence ---');
+  const validationPage = await browser.newPage();
+  const validationErrors = [];
+  validationPage.on('pageerror', e => validationErrors.push(e.message));
+  await validationPage.goto(FILE);
+  await validationPage.fill('#setupPw', 'password');
+  await validationPage.fill('#setupPw2', 'password');
+  await validationPage.click('#setupGo');
+  await validationPage.waitForSelector('#unlocked:not(.hidden)', { timeout: 20000 });
+  await openDetails(validationPage, 'Paste otpauth');
+  await validationPage.fill('#uriText',
+    'otpauth://totp/BadDigits?secret=JBSWY3DPEHPK3PXP&digits=1000000000\n' +
+    'otpauth://totp/BadPeriod?secret=JBSWY3DPEHPK3PXP&period=-30\n' +
+    'otpauth://hotp/BadCounter?secret=JBSWY3DPEHPK3PXP&counter=-1\n' +
+    'otpauth://totp/Good?secret=JBSWY3DPEHPK3PXP&digits=8&period=60');
+  await validationPage.click('#uriGo');
+  await validationPage.waitForSelector('.entry', { timeout: 5000 });
+  eq('only valid OTP parameters are imported', await validationPage.locator('.entry').count(), 1);
+  ok('valid entry retains its parameters', /8d.*60s/.test(await validationPage.locator('.badge').textContent()));
+  await validationPage.reload();
+  await validationPage.fill('#unlockPw', 'password');
+  await validationPage.click('#unlockGo');
+  await validationPage.waitForSelector('.entry', { timeout: 20000 });
+  eq('vault still opens after rejecting malformed entries', await validationPage.locator('.entry').count(), 1);
+  eq('malformed entries cause no page errors', validationErrors.length, 0, JSON.stringify(validationErrors));
+  await validationPage.close();
+
   await browser.close();
   console.log('\n' + pass + ' passed, ' + fail + ' failed');
   process.exit(fail ? 1 : 0);
